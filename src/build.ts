@@ -37,14 +37,21 @@ type BuildConfig = Parameters<typeof Bun.build>[0] & {
    * @see {@link publicPath} to customize the base url of linked source maps
    */
   sourcemap?: 'none' | 'linked' | 'inline' | 'external' | boolean
+  /**
+   * Clean the output directory before building.
+   *
+   * @default true
+   */
+  clean?: boolean
 }
 
 export async function build(config: BuildConfig): Promise<BuildOutput> {
-  const { watch, afterBuild, outdir, dts = true, plugins = [], sourcemap = watch ? 'external' : 'none', ...rest } = config
+  const { watch, afterBuild, outdir, dts = true, plugins = [], sourcemap = watch ? 'external' : 'none', clean = true, ...rest } = config
 
-  // TODO(Lumirelle): Add a flag to keep the output directory.
-  if (outdir && existsSync(outdir))
-    rmSync(outdir, { recursive: true, force: true })
+  if (clean) {
+    if (outdir && existsSync(outdir))
+      rmSync(outdir, { recursive: true, force: true })
+  }
 
   const entrypointPaths = config.entrypoints.map(e => absolute(e))
   const resolvedPaths = new Set<string>()
