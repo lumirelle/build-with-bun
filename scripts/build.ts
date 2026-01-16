@@ -5,6 +5,5 @@ await build({
     './src/index.ts',
   ],
   outdir: './dist',
-  dts: true,
   target: 'node',
 })

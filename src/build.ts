@@ -22,14 +22,16 @@ type BuildConfig = Parameters<typeof Bun.build>[0] & {
    */
   watch?: string
   /**
-   * Generate .d.ts files for TypeScript entrypoints (Using `oxc-transform`).
+   * Generate .d.ts files for entrypoints (Using `oxc-transform`).
+   *
+   * @default true
    */
   dts?: boolean
   onBuild?: (output: BuildOutput) => void
 }
 
 export async function build(config: BuildConfig): Promise<BuildOutput> {
-  const { watch, onBuild, sourcemap, outdir, dts, plugins = [], ...rest } = config
+  const { watch, onBuild, sourcemap, outdir, dts = true, plugins = [], ...rest } = config
 
   // Watch mode requires external sourcemap to map files correctly
   if (watch && config.sourcemap !== 'external')
