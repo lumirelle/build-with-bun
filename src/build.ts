@@ -1,86 +1,75 @@
-/* eslint-disable no-console */
-import type { BuildArtifact, BuildOutput } from 'bun'
-import { color } from 'bun' with { type: 'macro' }
-import fs, { existsSync, rmSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import type { BuildOutput } from 'bun'
+import { existsSync, rmSync } from 'node:fs'
 import { absolute } from './utils.ts'
-
-async function getArtifactSources(artifact: BuildArtifact): Promise<string[]> {
-  const sourcemap = await artifact.sourcemap?.json() as { sources: string[] } | null
-  const sources = sourcemap ? sourcemap.sources : []
-  return sources.map(source => join(dirname(artifact.path), source))
-}
-
-async function getOutputSources(output: BuildOutput): Promise<Set<string>> {
-  const sources = await Promise.all(output.outputs.map(getArtifactSources))
-  return new Set(sources.flat().map(absolute))
-}
 
 type BuildConfig = Parameters<typeof Bun.build>[0] & {
   /**
-   * Watch the specified directory for changes and rebuild on change.
+   * Watch for file changes and rebuild automatically.
+   * Files to watch are automatically resolved from entrypoints.
    */
-  watch?: string
+  watch?: boolean
   /**
    * Generate .d.ts files for entrypoints (Using `oxc-transform`).
    *
    * @default true
    */
   dts?: boolean
-  onBuild?: (output: BuildOutput) => void
+  /**
+   * Callback function to be called after the build is complete.
+   */
+  afterBuild?: (output: BuildOutput) => Promise<void> | void
+  /**
+   * Specifies if and how to generate source maps.
+   *
+   * - `"none"` - No source maps are generated
+   * - `"linked"` - A separate `*.ext.map` file is generated alongside each
+   *   `*.ext` file. A `//# sourceMappingURL` comment is added to the output
+   *   file to link the two. Requires `outdir` to be set.
+   * - `"inline"` - an inline source map is appended to the output file.
+   * - `"external"` - Generate a separate source map file for each input file.
+   *   No `//# sourceMappingURL` comment is added to the output file.
+   *
+   * `true` and `false` are aliases for `"inline"` and `"none"`, respectively.
+   *
+   * @default "none" or "external" if `watch` is `true`
+   *
+   * @see {@link outdir} required for `"linked"` maps
+   * @see {@link publicPath} to customize the base url of linked source maps
+   */
+  sourcemap?: 'none' | 'linked' | 'inline' | 'external' | boolean
 }
 
 export async function build(config: BuildConfig): Promise<BuildOutput> {
-  const { watch, onBuild, sourcemap, outdir, dts = true, plugins = [], ...rest } = config
+  const { watch, afterBuild, outdir, dts = true, plugins = [], sourcemap = watch ? 'external' : 'none', ...rest } = config
 
-  // Watch mode requires external sourcemap to map files correctly
-  if (watch && config.sourcemap !== 'external')
-    console.error('Watch requires external sourcemap, setting to external')
-
-  // Clear outdir before building
+  // TODO(Lumirelle): Add a flag to keep the output directory.
   if (outdir && existsSync(outdir))
     rmSync(outdir, { recursive: true, force: true })
 
-  // If dts is enabled, add the dts generate plugin
+  const entrypointPaths = config.entrypoints.map(e => absolute(e))
+  const resolvedPaths = new Set<string>()
+
+  if (dts || watch)
+    plugins.push((await import('./resolve.ts')).resolve(resolvedPaths, entrypointPaths))
+
   if (dts)
-    plugins.push((await import('./dts.ts')).dts())
+    plugins.push((await import('./dts.ts')).dts(resolvedPaths, entrypointPaths))
 
-  const newConfig = { outdir, sourcemap, plugins, ...rest }
-
-  let output = await Bun.build(newConfig)
+  const buildConfig = { outdir, plugins, sourcemap, ...rest }
 
   if (watch) {
-    let sources = await getOutputSources(output)
-    let debounce: Timer | null = null
-    let pending = false
-
-    const rebuild = async (): Promise<void> => {
-      if (pending)
-        return
-      pending = true
-      console.log(`${color('blue', 'ansi')}Rebuilding...${color('white', 'ansi')}`)
-      output = await Bun.build(newConfig)
-      sources = await getOutputSources(output)
-      onBuild && onBuild(output)
-      console.log(`${color('green', 'ansi')}Rebuild complete.${color('white', 'ansi')}`)
-      console.log(`${color('white', 'ansi')}Watching for changes...${color('white', 'ansi')}`)
-      pending = false
-    }
-
-    fs.watch(watch, { recursive: true }, (event, filename) => {
-      if (!filename)
-        return
-      const source = absolute(join(watch, filename))
-      if (!sources.has(source))
-        return
-      if (debounce)
-        clearTimeout(debounce)
-      debounce = setTimeout(rebuild, 50)
-    })
+    plugins.push(
+      (await import('./watch.ts')).watch({
+        onRebuild: async () => {
+          const output = await Bun.build(buildConfig)
+          await afterBuild?.(output)
+        },
+      }, resolvedPaths),
+    )
   }
 
-  onBuild && onBuild(output)
-  if (watch)
-    console.log(`${color('white', 'ansi')}Watching for changes...${color('white', 'ansi')}`)
+  const output = await Bun.build(buildConfig)
+  await afterBuild?.(output)
+
   return output
 }

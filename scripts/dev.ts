@@ -6,6 +6,5 @@ await build({
   ],
   outdir: './dist',
   target: 'node',
-  watch: './src',
-  sourcemap: 'external',
+  watch: true,
 })

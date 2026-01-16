@@ -1,12 +1,19 @@
 import type { BunPlugin } from 'bun'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { isolatedDeclarationSync } from 'oxc-transform'
-import { RE_TS } from './filename.ts'
 import { absolute, cwd } from './utils.ts'
 
-export function dts(): BunPlugin {
+export function dts(
+  resolvedFiles: Set<string>,
+  entrypointPaths: string[],
+): BunPlugin {
+  /**
+   * A set of files that have been written to the output directory.
+   */
   const wroteTrack = new Set<string>()
-  const resolvedFiles = new Set<string>()
+  /**
+   * A map from file path to its isolated declaration.
+   */
   const dtsMap = new Map<string, string>()
 
   return {
@@ -15,28 +22,14 @@ export function dts(): BunPlugin {
       if (!builder.config.outdir)
         return
 
-      const entrypointPaths = builder.config.entrypoints.map(e => absolute(e))
       const outPath = absolute(builder.config.outdir)
 
       builder.onStart(() => {
         wroteTrack.clear()
-        resolvedFiles.clear()
         dtsMap.clear()
-        entrypointPaths.forEach(path => resolvedFiles.add(path))
       })
 
-      builder.onResolve({ filter: RE_TS }, (args) => {
-        const importerPath = args.importer ? absolute(args.importer) : null
-        if (importerPath && (entrypointPaths.includes(importerPath) || resolvedFiles.has(importerPath))) {
-          const resolvedPath = isAbsolute(args.path)
-            ? args.path
-            : resolve(dirname(importerPath), args.path)
-          resolvedFiles.add(resolvedPath)
-        }
-        return undefined
-      })
-
-      builder.onLoad({ filter: /\.ts$/ }, async (args) => {
+      builder.onLoad({ filter: /\.([cm]?)tsx?$/ }, async (args) => {
         if (!resolvedFiles.has(args.path) || wroteTrack.has(args.path))
           return
 
