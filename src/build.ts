@@ -2,14 +2,8 @@
 import type { BuildArtifact, BuildOutput } from 'bun'
 import { color } from 'bun' with { type: 'macro' }
 import fs, { existsSync, rmSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import process from 'node:process'
-
-const cwd = process.cwd()
-
-function absolute(path: string): string {
-  return resolve(cwd, path)
-}
+import { dirname, join } from 'node:path'
+import { absolute } from './utils.ts'
 
 async function getArtifactSources(artifact: BuildArtifact): Promise<string[]> {
   const sourcemap = await artifact.sourcemap?.json() as { sources: string[] } | null
@@ -45,9 +39,9 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   if (outdir && existsSync(outdir))
     rmSync(outdir, { recursive: true, force: true })
 
-  // If dts is enabled, add the dts plugin
+  // If dts is enabled, add the dts generate plugin
   if (dts)
-    plugins.push((await import('./plugins/dts.ts')).dts())
+    plugins.push((await import('./dts.ts')).dts())
 
   const newConfig = { outdir, sourcemap, plugins, ...rest }
 
