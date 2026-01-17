@@ -47,7 +47,9 @@
         "typescript": "^5.9.3"
       },
       "inlined": {
-        "@antfu/utils": "^9.3.0",
+        "@antfu/utils": "^9.3.0"
+      },
+      "prod": {
         "oxc-transform": "^0.108.0"
       },
       "check": {
@@ -68,6 +70,9 @@
       }
     }
   },
+  "dependencies": {
+    "oxc-transform": "catalog:prod"
+  },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:check",
     "@antfu/utils": "catalog:inlined",
@@ -79,7 +84,6 @@
     "eslint-plugin-format": "catalog:check",
     "knip": "catalog:check",
     "lint-staged": "catalog:check",
-    "oxc-transform": "catalog:inlined",
     "publint": "catalog:check",
     "simple-git-hooks": "catalog:dev",
     "typescript": "catalog:dev",
