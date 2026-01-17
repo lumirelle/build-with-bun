@@ -43,15 +43,20 @@ type BuildConfig = Parameters<typeof Bun.build>[0] & {
    * @default true
    */
   clean?: boolean
+  /**
+   * Control whether package dependencies are included to bundle or not.
+   * Bun treats any import which path do not start with `.`, `..` or `/` as package.
+   *
+   * @default "external"
+   */
+  packages?: 'bundle' | 'external'
 }
 
 export async function build(config: BuildConfig): Promise<BuildOutput> {
-  const { watch, afterBuild, outdir, dts = true, plugins = [], sourcemap = watch ? 'external' : 'none', clean = true, ...rest } = config
+  const { watch, afterBuild, outdir, dts = true, plugins = [], sourcemap = watch ? 'external' : 'none', clean = true, packages = 'external', ...rest } = config
 
-  if (clean) {
-    if (outdir && existsSync(outdir))
-      rmSync(outdir, { recursive: true, force: true })
-  }
+  if (clean && outdir && existsSync(outdir))
+    rmSync(outdir, { recursive: true, force: true })
 
   const entrypointPaths = config.entrypoints.map(e => absolute(e))
   const resolvedPaths = new Set<string>()
@@ -62,7 +67,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   if (dts)
     plugins.push((await import('./dts.ts')).dts(resolvedPaths, entrypointPaths))
 
-  const buildConfig = { outdir, plugins, sourcemap, ...rest }
+  const buildConfig = { outdir, plugins, sourcemap, packages, ...rest }
 
   if (watch) {
     plugins.push(
