@@ -1,6 +1,4 @@
-/* eslint-disable no-console */
 import type { BunPlugin } from 'bun'
-import { color } from 'bun' with { type: 'macro' }
 import fs from 'node:fs'
 import { dirname as pathDirname } from 'node:path'
 import { absolute } from './utils.ts'
@@ -31,10 +29,7 @@ export function watch(
           if (pending)
             return
           pending = true
-          console.log(`${color('blue', 'ansi')}Rebuilding...${color('white', 'ansi')}`)
           await onRebuild?.()
-          console.log(`${color('green', 'ansi')}Rebuild complete.${color('white', 'ansi')}`)
-          console.log(`${color('white', 'ansi')}Watching for changes...${color('white', 'ansi')}`)
           pending = false
         }
 
@@ -63,8 +58,6 @@ export function watch(
             watchers.set(dir, watcher)
           }
         }
-
-        console.log(`${color('white', 'ansi')}Watching for changes...${color('white', 'ansi')}`)
       })
     },
   }

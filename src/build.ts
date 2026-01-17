@@ -1,6 +1,8 @@
+/* eslint-disable no-console */
 import type { BuildOutput } from 'bun'
 import { existsSync, rmSync } from 'node:fs'
-import { absolute } from './utils.ts'
+import { styleText } from 'node:util'
+import { absolute, formatDuration } from './utils.ts'
 
 type BuildConfig = Parameters<typeof Bun.build>[0] & {
   /**
@@ -55,6 +57,8 @@ type BuildConfig = Parameters<typeof Bun.build>[0] & {
 export async function build(config: BuildConfig): Promise<BuildOutput> {
   const { watch, afterBuild, outdir, dts = true, plugins = [], sourcemap = watch ? 'external' : 'none', clean = true, packages = 'external', ...rest } = config
 
+  const startTime = performance.now()
+
   if (clean && outdir && existsSync(outdir))
     rmSync(outdir, { recursive: true, force: true })
 
@@ -73,7 +77,12 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     plugins.push(
       (await import('./watch.ts')).watch({
         onRebuild: async () => {
+          const rebuildStartTime = performance.now()
+          console.info('💤 File changed, rebuilding...')
           const output = await Bun.build(buildConfig)
+          const rebuildEndTime = performance.now()
+          const rebuildDuration = rebuildEndTime - rebuildStartTime
+          console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildDuration))}`)
           await afterBuild?.(output)
         },
       }, resolvedPaths),
@@ -81,6 +90,12 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   }
 
   const output = await Bun.build(buildConfig)
+
+  // 计算并显示构建用时
+  const endTime = performance.now()
+  const duration = endTime - startTime
+  console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(duration))}`)
+
   await afterBuild?.(output)
 
   return output
