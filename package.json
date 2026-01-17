@@ -1,7 +1,7 @@
 {
   "name": "@lumirelle/build-with-bun",
   "type": "module",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A utils for building JS/TS projects with bun",
   "author": "Lumirelle <shabbyacc@outlook.com>",
   "license": "MIT",
