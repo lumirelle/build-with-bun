@@ -1,4 +1,4 @@
-import type { ResolvedFilesMap } from '../src/types.ts'
+import type { ResolvedDepFilesMap } from '../src/types.ts'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,8 +9,8 @@ import { watch } from '../src/watch.ts'
 /**
  * Helper to create a ResolvedFilesMap from entrypoint and its files.
  */
-function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedFilesMap {
-  const map: ResolvedFilesMap = new Map()
+function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedDepFilesMap {
+  const map: ResolvedDepFilesMap = new Map()
   map.set(entrypoint, new Set(files))
   return map
 }
@@ -138,7 +138,7 @@ describe('watch', () => {
 
     const entry1Path = absolute(entry1File)
     const entry2Path = absolute(entry2File)
-    const resolvedFilesMap: ResolvedFilesMap = new Map()
+    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
     resolvedFilesMap.set(entry1Path, new Set([entry1Path, absolute(utils1File)]))
     resolvedFilesMap.set(entry2Path, new Set([entry2Path, absolute(utils2File)]))
 

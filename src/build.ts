@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import type { BuildOutput } from 'bun'
-import type { ResolvedFilesMap } from './types.ts'
+import type { ResolvedDepFilesMap } from './types.ts'
 import { existsSync, rmSync } from 'node:fs'
 import { styleText } from 'node:util'
 import { absolute, formatDuration } from './utils.ts'
@@ -56,27 +56,42 @@ type BuildConfig = Parameters<typeof Bun.build>[0] & {
 }
 
 export async function build(config: BuildConfig): Promise<BuildOutput> {
-  const { watch, afterBuild, outdir, dts = true, plugins = [], sourcemap = watch ? 'external' : 'none', clean = true, packages = 'external', ...rest } = config
-
   const startTime = performance.now()
+
+  const {
+    watch,
+    afterBuild,
+    outdir,
+    dts = true,
+    plugins = [],
+    sourcemap = watch ? 'external' : 'none',
+    clean = true,
+    packages = 'external',
+    ...rest
+  } = config
 
   if (clean && outdir && existsSync(outdir))
     rmSync(outdir, { recursive: true, force: true })
 
-  const entrypointPaths = config.entrypoints.map(e => absolute(e))
+  const absEntrypoints = config.entrypoints.map(e => absolute(e))
   /**
-   * Map from entrypoint path to its resolved dependencies.
-   * Each entrypoint tracks its own set of dependencies.
+   * Map from absolute entrypoint path to its resolved dependent files. Each entrypoint tracks its own set of dependent files.
    */
-  const resolvedFilesMap: ResolvedFilesMap = new Map<string, Set<string>>()
+  const resolvedDepFilesMap: ResolvedDepFilesMap = new Map<string, Set<string>>()
 
   if (dts || watch)
-    plugins.push((await import('./resolve.ts')).resolve(resolvedFilesMap, entrypointPaths))
+    plugins.push((await import('./resolve.ts')).resolve(absEntrypoints, resolvedDepFilesMap))
 
   if (dts)
-    plugins.push((await import('./dts.ts')).dts(resolvedFilesMap, entrypointPaths))
+    plugins.push((await import('./dts.ts')).dts(absEntrypoints, resolvedDepFilesMap))
 
-  const buildConfig = { outdir, plugins, sourcemap, packages, ...rest }
+  const buildConfig = {
+    outdir,
+    plugins,
+    sourcemap,
+    packages,
+    ...rest,
+  }
 
   if (watch) {
     plugins.push(
@@ -85,23 +100,22 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
           const rebuildStartTime = performance.now()
           console.info('💤 File changed, rebuilding...')
           const output = await Bun.build(buildConfig)
+          await afterBuild?.(output)
           const rebuildEndTime = performance.now()
           const rebuildDuration = rebuildEndTime - rebuildStartTime
           console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildDuration))}`)
-          await afterBuild?.(output)
         },
-      }, resolvedFilesMap),
+      }, resolvedDepFilesMap),
     )
   }
 
   const output = await Bun.build(buildConfig)
 
-  // 计算并显示构建用时
+  await afterBuild?.(output)
+
   const endTime = performance.now()
   const duration = endTime - startTime
   console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(duration))}`)
-
-  await afterBuild?.(output)
 
   return output
 }

@@ -1,8 +1,6 @@
 import type { BunPlugin } from 'bun'
-import type { ResolvedFilesMap } from './types.ts'
+import type { ResolvedDepFilesMap } from './types.ts'
 import fs from 'node:fs'
-import { dirname as pathDirname } from 'node:path'
-import { absolute } from './utils.ts'
 
 export interface WatchOptions {
   onRebuild?: () => Promise<void> | void
@@ -10,21 +8,20 @@ export interface WatchOptions {
 }
 
 /**
- * Get all resolved files from the map (union of all entrypoints' dependencies).
+ * Get all resolved dependent files from the map (union of all entrypoints' dependent files).
  */
-function getAllResolvedFiles(resolvedFilesMap: ResolvedFilesMap): Set<string> {
+function getAllAbsResolvedDepFiles(resolvedDepFilesMap: ResolvedDepFilesMap): Set<string> {
   const allFiles = new Set<string>()
-  for (const files of resolvedFilesMap.values()) {
-    for (const file of files) {
+  for (const files of resolvedDepFilesMap.values()) {
+    for (const file of files)
       allFiles.add(file)
-    }
   }
   return allFiles
 }
 
 export function watch(
   options: WatchOptions = {},
-  resolvedFilesMap: ResolvedFilesMap,
+  resolvedDepFilesMap: ResolvedDepFilesMap,
 ): BunPlugin {
   const { onRebuild, debounce = 50 } = options
   let rebuildFn: (() => Promise<void>) | null = null
@@ -51,30 +48,20 @@ export function watch(
           watcher.close()
         watchers.clear()
 
-        const watchedDirs = new Set<string>()
-        // Get all resolved files from all entrypoints for watching.
-        const allResolvedFiles = getAllResolvedFiles(resolvedFilesMap)
+        // Get all resolved dependent files from all entrypoints for watching.
+        const allAbsResolvedDepFiles = getAllAbsResolvedDepFiles(resolvedDepFilesMap)
 
-        for (const filePath of allResolvedFiles) {
-          const dir = pathDirname(absolute(filePath))
-          if (!watchedDirs.has(dir)) {
-            watchedDirs.add(dir)
-            const watcher = fs.watch(dir, { recursive: false }, (event, filename) => {
-              if (!filename)
-                return
-              const changedFile = absolute(`${dir}/${filename}`)
-              // Re-check against current resolved files (may have changed after rebuild).
-              const currentResolvedFiles = getAllResolvedFiles(resolvedFilesMap)
-              if (!currentResolvedFiles.has(changedFile))
-                return
-              if (debounceTimer)
-                clearTimeout(debounceTimer)
-              debounceTimer = setTimeout(() => {
-                rebuildFn?.()
-              }, debounce)
-            })
-            watchers.set(dir, watcher)
-          }
+        for (const filePath of allAbsResolvedDepFiles) {
+          const watcher = fs.watch(filePath, { recursive: false }, (_, filename) => {
+            if (!filename)
+              return
+            if (debounceTimer)
+              clearTimeout(debounceTimer)
+            debounceTimer = setTimeout(() => {
+              rebuildFn?.()
+            }, debounce)
+          })
+          watchers.set(filePath, watcher)
         }
       })
     },

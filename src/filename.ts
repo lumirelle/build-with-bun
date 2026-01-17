@@ -22,24 +22,21 @@ export const TS_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'] as const
  */
 export function tryResolveTs(basePath: string): string | null {
   // If already has a TS extension, check if it exists
-  if (RE_TS.test(basePath)) {
+  if (RE_TS.test(basePath))
     return existsSync(basePath) ? basePath : null
-  }
 
-  // Try adding each extension
+  // Otherwise, try adding each extension
   for (const ext of TS_EXTENSIONS) {
     const pathWithExt = `${basePath}${ext}`
-    if (existsSync(pathWithExt)) {
+    if (existsSync(pathWithExt))
       return pathWithExt
-    }
   }
 
-  // Try index files
+  // Otherwise, try index files
   for (const ext of TS_EXTENSIONS) {
     const indexPath = resolve(basePath, `index${ext}`)
-    if (existsSync(indexPath)) {
+    if (existsSync(indexPath))
       return indexPath
-    }
   }
 
   return null
