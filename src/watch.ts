@@ -1,4 +1,5 @@
 import type { BunPlugin } from 'bun'
+import type { ResolvedFilesMap } from './resolve.ts'
 import fs from 'node:fs'
 import { dirname as pathDirname } from 'node:path'
 import { absolute } from './utils.ts'
@@ -8,9 +9,22 @@ export interface WatchOptions {
   debounce?: number
 }
 
+/**
+ * Get all resolved files from the map (union of all entrypoints' dependencies).
+ */
+function getAllResolvedFiles(resolvedFilesMap: ResolvedFilesMap): Set<string> {
+  const allFiles = new Set<string>()
+  for (const files of resolvedFilesMap.values()) {
+    for (const file of files) {
+      allFiles.add(file)
+    }
+  }
+  return allFiles
+}
+
 export function watch(
   options: WatchOptions = {},
-  resolvedFiles: Set<string>,
+  resolvedFilesMap: ResolvedFilesMap,
 ): BunPlugin {
   const { onRebuild, debounce = 50 } = options
   let rebuildFn: (() => Promise<void>) | null = null
@@ -38,8 +52,10 @@ export function watch(
         watchers.clear()
 
         const watchedDirs = new Set<string>()
+        // Get all resolved files from all entrypoints for watching.
+        const allResolvedFiles = getAllResolvedFiles(resolvedFilesMap)
 
-        for (const filePath of resolvedFiles) {
+        for (const filePath of allResolvedFiles) {
           const dir = pathDirname(absolute(filePath))
           if (!watchedDirs.has(dir)) {
             watchedDirs.add(dir)
@@ -47,7 +63,9 @@ export function watch(
               if (!filename)
                 return
               const changedFile = absolute(`${dir}/${filename}`)
-              if (!resolvedFiles.has(changedFile))
+              // Re-check against current resolved files (may have changed after rebuild).
+              const currentResolvedFiles = getAllResolvedFiles(resolvedFilesMap)
+              if (!currentResolvedFiles.has(changedFile))
                 return
               if (debounceTimer)
                 clearTimeout(debounceTimer)

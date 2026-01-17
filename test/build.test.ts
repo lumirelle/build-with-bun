@@ -149,4 +149,34 @@ describe('build', () => {
 
     expect(output.success).toBe(true)
   })
+
+  it('should use default packages as external', async () => {
+    const entryFile = join(testDir, 'index.ts')
+    writeFileSync(entryFile, 'import { join } from "node:path"\nexport const test = join("a", "b")')
+
+    const output = await build({
+      entrypoints: [entryFile],
+      outdir: testOutDir,
+      dts: false,
+    })
+
+    expect(output.success).toBe(true)
+    const content = await Bun.file(join(testOutDir, 'index.js')).text()
+    // External packages should be kept as imports
+    expect(content).toContain('node:path')
+  })
+
+  it('should bundle packages when packages is set to bundle', async () => {
+    const entryFile = join(testDir, 'index.ts')
+    writeFileSync(entryFile, 'export const hello = "world"')
+
+    const output = await build({
+      entrypoints: [entryFile],
+      outdir: testOutDir,
+      dts: false,
+      packages: 'bundle',
+    })
+
+    expect(output.success).toBe(true)
+  })
 })

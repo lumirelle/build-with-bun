@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import type { BuildOutput } from 'bun'
+import type { ResolvedFilesMap } from './resolve.ts'
 import { existsSync, rmSync } from 'node:fs'
 import { styleText } from 'node:util'
 import { absolute, formatDuration } from './utils.ts'
@@ -63,13 +64,17 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     rmSync(outdir, { recursive: true, force: true })
 
   const entrypointPaths = config.entrypoints.map(e => absolute(e))
-  const resolvedPaths = new Set<string>()
+  /**
+   * Map from entrypoint path to its resolved dependencies.
+   * Each entrypoint tracks its own set of dependencies.
+   */
+  const resolvedFilesMap: ResolvedFilesMap = new Map<string, Set<string>>()
 
   if (dts || watch)
-    plugins.push((await import('./resolve.ts')).resolve(resolvedPaths, entrypointPaths))
+    plugins.push((await import('./resolve.ts')).resolve(resolvedFilesMap, entrypointPaths))
 
   if (dts)
-    plugins.push((await import('./dts.ts')).dts(resolvedPaths, entrypointPaths))
+    plugins.push((await import('./dts.ts')).dts(resolvedFilesMap, entrypointPaths))
 
   const buildConfig = { outdir, plugins, sourcemap, packages, ...rest }
 
@@ -85,7 +90,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
           console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildDuration))}`)
           await afterBuild?.(output)
         },
-      }, resolvedPaths),
+      }, resolvedFilesMap),
     )
   }
 

@@ -1,9 +1,19 @@
+import type { ResolvedFilesMap } from '../src/resolve.ts'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { absolute } from '../src/utils.ts'
 import { watch } from '../src/watch.ts'
+
+/**
+ * Helper to create a ResolvedFilesMap from entrypoint and its files.
+ */
+function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedFilesMap {
+  const map: ResolvedFilesMap = new Map()
+  map.set(entrypoint, new Set(files))
+  return map
+}
 
 describe('watch', () => {
   const testDir = join(tmpdir(), 'watch-test')
@@ -23,8 +33,9 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const resolvedFiles = new Set<string>([absolute(entryFile)])
-    const plugin = watch({}, resolvedFiles)
+    const entrypointPath = absolute(entryFile)
+    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
+    const plugin = watch({}, resolvedFilesMap)
 
     expect(plugin.name).toBe('watch')
     expect(plugin.setup).toBeDefined()
@@ -34,7 +45,8 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const resolvedFiles = new Set<string>([absolute(entryFile)])
+    const entrypointPath = absolute(entryFile)
+    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     let rebuildCalled = false
 
     const plugin = watch({
@@ -42,7 +54,7 @@ describe('watch', () => {
         rebuildCalled = true
       },
       debounce: 10,
-    }, resolvedFiles)
+    }, resolvedFilesMap)
 
     const endCallbacks: Array<(result: any) => Promise<void>> = []
     const builder = {
@@ -72,14 +84,15 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const resolvedFiles = new Set<string>([absolute(entryFile)])
+    const entrypointPath = absolute(entryFile)
+    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     let rebuildCalled = false
 
     const plugin = watch({
       onRebuild: async () => {
         rebuildCalled = true
       },
-    }, resolvedFiles)
+    }, resolvedFilesMap)
 
     const builder = {
       config: {
@@ -104,11 +117,34 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const resolvedFiles = new Set<string>([absolute(entryFile)])
+    const entrypointPath = absolute(entryFile)
+    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     const plugin = watch({
       debounce: 100,
-    }, resolvedFiles)
+    }, resolvedFilesMap)
 
     expect(plugin.name).toBe('watch')
+  })
+
+  it('should watch files from multiple entrypoints', () => {
+    const entry1File = join(testDir, 'entry1.ts')
+    const entry2File = join(testDir, 'entry2.ts')
+    const utils1File = join(testDir, 'utils1.ts')
+    const utils2File = join(testDir, 'utils2.ts')
+    writeFileSync(entry1File, 'export { foo } from "./utils1.ts"')
+    writeFileSync(entry2File, 'export { bar } from "./utils2.ts"')
+    writeFileSync(utils1File, 'export const foo = "foo"')
+    writeFileSync(utils2File, 'export const bar = "bar"')
+
+    const entry1Path = absolute(entry1File)
+    const entry2Path = absolute(entry2File)
+    const resolvedFilesMap: ResolvedFilesMap = new Map()
+    resolvedFilesMap.set(entry1Path, new Set([entry1Path, absolute(utils1File)]))
+    resolvedFilesMap.set(entry2Path, new Set([entry2Path, absolute(utils2File)]))
+
+    const plugin = watch({}, resolvedFilesMap)
+
+    expect(plugin.name).toBe('watch')
+    expect(plugin.setup).toBeDefined()
   })
 })
