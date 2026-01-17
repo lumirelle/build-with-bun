@@ -352,6 +352,63 @@ describe('dts', () => {
     expect(existsSync(dtsFile)).toBe(true)
   })
 
+  it('should handle imports without file extension', async () => {
+    const entryFile = join(testDir, 'index.ts')
+    const commandFile = join(testDir, 'command.ts')
+    writeFileSync(entryFile, 'export * as cmd from "./command"')
+    writeFileSync(commandFile, 'export const run = (): void => {}')
+
+    const entrypointPath = absolute(entryFile)
+    const resolvedFilesMap: ResolvedFilesMap = new Map()
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(commandFile)]))
+    const entrypointPaths = [entrypointPath]
+
+    await Bun.build({
+      entrypoints: [entryFile],
+      outdir: testOutDir,
+      plugins: [
+        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+        dts(resolvedFilesMap, entrypointPaths),
+      ],
+    })
+
+    const dtsFile = join(testOutDir, 'index.d.ts')
+    expect(existsSync(dtsFile)).toBe(true)
+
+    const dtsContent = await Bun.file(dtsFile).text()
+    expect(dtsContent).toContain('run')
+    // Should not contain the import statement since it's merged
+    expect(dtsContent).not.toMatch(/from\s+['"]\.\/command['"]/)
+  })
+
+  it('should handle tsx files without extension', async () => {
+    const entryFile = join(testDir, 'index.ts')
+    const componentFile = join(testDir, 'Component.tsx')
+    writeFileSync(entryFile, 'export { Component } from "./Component"')
+    // Use a simple tsx file without JSX to avoid needing react runtime
+    writeFileSync(componentFile, 'export const Component = "tsx-component"')
+
+    const entrypointPath = absolute(entryFile)
+    const resolvedFilesMap: ResolvedFilesMap = new Map()
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(componentFile)]))
+    const entrypointPaths = [entrypointPath]
+
+    await Bun.build({
+      entrypoints: [entryFile],
+      outdir: testOutDir,
+      plugins: [
+        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+        dts(resolvedFilesMap, entrypointPaths),
+      ],
+    })
+
+    const dtsFile = join(testOutDir, 'index.d.ts')
+    expect(existsSync(dtsFile)).toBe(true)
+
+    const dtsContent = await Bun.file(dtsFile).text()
+    expect(dtsContent).toContain('Component')
+  })
+
   it('should generate separate dts for multiple entrypoints', async () => {
     const entry1File = join(testDir, 'entry1.ts')
     const entry2File = join(testDir, 'entry2.ts')

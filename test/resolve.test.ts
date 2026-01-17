@@ -121,6 +121,89 @@ describe('resolve', () => {
     }
   })
 
+  it('should resolve imports without file extension', () => {
+    const entryFile = join(testDir, 'index.ts')
+    const commandFile = join(testDir, 'command.ts')
+    writeFileSync(entryFile, 'export * as cmd from "./command"')
+    writeFileSync(commandFile, 'export const run = () => {}')
+
+    const entrypointPaths = [absolute(entryFile)]
+    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+
+    const startCallbacks: Array<() => void> = []
+    const resolveCallbacks: Array<(args: any) => any> = []
+    const builder = {
+      config: {
+        entrypoints: [entryFile],
+      },
+      onStart: (callback: () => void) => {
+        startCallbacks.push(callback)
+      },
+      onResolve: (options: any, callback: (args: any) => any) => {
+        resolveCallbacks.push(callback)
+      },
+    } as any
+
+    plugin.setup(builder)
+    startCallbacks.forEach(cb => cb())
+
+    // Find the callback for relative imports (RE_RELATIVE filter)
+    const resolveCallback = resolveCallbacks[1] // Second callback is for relative imports
+    expect(resolveCallback).toBeDefined()
+    if (resolveCallback) {
+      const result = resolveCallback({
+        path: './command', // No extension
+        importer: entryFile,
+      })
+
+      expect(result).toBeUndefined()
+      const entrypointFiles = resolvedFilesMap.get(absolute(entryFile))
+      // Should resolve to command.ts
+      expect(entrypointFiles?.has(absolute(commandFile))).toBe(true)
+    }
+  })
+
+  it('should resolve tsx imports without file extension', () => {
+    const entryFile = join(testDir, 'index.ts')
+    const componentFile = join(testDir, 'Component.tsx')
+    writeFileSync(entryFile, 'export { Component } from "./Component"')
+    writeFileSync(componentFile, 'export const Component = () => <div />')
+
+    const entrypointPaths = [absolute(entryFile)]
+    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+
+    const startCallbacks: Array<() => void> = []
+    const resolveCallbacks: Array<(args: any) => any> = []
+    const builder = {
+      config: {
+        entrypoints: [entryFile],
+      },
+      onStart: (callback: () => void) => {
+        startCallbacks.push(callback)
+      },
+      onResolve: (options: any, callback: (args: any) => any) => {
+        resolveCallbacks.push(callback)
+      },
+    } as any
+
+    plugin.setup(builder)
+    startCallbacks.forEach(cb => cb())
+
+    const resolveCallback = resolveCallbacks[1]
+    expect(resolveCallback).toBeDefined()
+    if (resolveCallback) {
+      const result = resolveCallback({
+        path: './Component', // No extension
+        importer: entryFile,
+      })
+
+      expect(result).toBeUndefined()
+      const entrypointFiles = resolvedFilesMap.get(absolute(entryFile))
+      // Should resolve to Component.tsx
+      expect(entrypointFiles?.has(absolute(componentFile))).toBe(true)
+    }
+  })
+
   it('should track dependencies separately for multiple entrypoints', () => {
     const entryFile1 = join(testDir, 'entry1.ts')
     const entryFile2 = join(testDir, 'entry2.ts')
