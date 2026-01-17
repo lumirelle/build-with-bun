@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import type { BuildOutput } from 'bun'
-import type { ResolvedFilesMap } from './resolve.ts'
+import type { ResolvedFilesMap } from './types.ts'
 import { existsSync, rmSync } from 'node:fs'
 import { styleText } from 'node:util'
 import { absolute, formatDuration } from './utils.ts'

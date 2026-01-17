@@ -1,47 +1,8 @@
 import type { BunPlugin } from 'bun'
-import { existsSync } from 'node:fs'
+import type { ResolvedFilesMap } from './types.ts'
 import { dirname, isAbsolute, resolve as pathResolve } from 'node:path'
-import { RE_RELATIVE, RE_TS } from './filename.ts'
+import { RE_RELATIVE, RE_TS, tryResolveTs } from './filename.ts'
 import { absolute } from './utils.ts'
-
-/**
- * Map from entrypoint path to its resolved dependencies.
- */
-export type ResolvedFilesMap = Map<string, Set<string>>
-
-/**
- * TypeScript file extensions to try when resolving imports without extension.
- */
-const TS_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts']
-
-/**
- * Try to resolve a path to a TypeScript file by adding extensions.
- * Returns the resolved path if found, or null if not found.
- */
-function tryResolveTs(basePath: string): string | null {
-  // If already has a TS extension, check if it exists
-  if (RE_TS.test(basePath)) {
-    return existsSync(basePath) ? basePath : null
-  }
-
-  // Try adding each extension
-  for (const ext of TS_EXTENSIONS) {
-    const pathWithExt = `${basePath}${ext}`
-    if (existsSync(pathWithExt)) {
-      return pathWithExt
-    }
-  }
-
-  // Try index files
-  for (const ext of TS_EXTENSIONS) {
-    const indexPath = pathResolve(basePath, `index${ext}`)
-    if (existsSync(indexPath)) {
-      return indexPath
-    }
-  }
-
-  return null
-}
 
 /**
  * Resolve the dependencies of the entrypoints.

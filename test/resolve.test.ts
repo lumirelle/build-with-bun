@@ -1,4 +1,4 @@
-import type { ResolvedFilesMap } from '../src/resolve.ts'
+import type { ResolvedFilesMap } from '../src/types.ts'
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

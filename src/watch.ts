@@ -1,5 +1,5 @@
 import type { BunPlugin } from 'bun'
-import type { ResolvedFilesMap } from './resolve.ts'
+import type { ResolvedFilesMap } from './types.ts'
 import fs from 'node:fs'
 import { dirname as pathDirname } from 'node:path'
 import { absolute } from './utils.ts'

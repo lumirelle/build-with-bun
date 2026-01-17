@@ -1,43 +1,32 @@
 import type { BunPlugin } from 'bun'
-import type { ResolvedFilesMap } from './resolve.ts'
-import { existsSync } from 'node:fs'
+import type { ResolvedFilesMap } from './types.ts'
 import { basename, dirname, join, parse, relative, resolve } from 'node:path'
 import { isolatedDeclarationSync } from 'oxc-transform'
-import { RE_TS } from './filename.ts'
+import { RE_TS, tryResolveTs } from './filename.ts'
 import { absolute, cwd } from './utils.ts'
 
 /**
- * TypeScript file extensions to try when resolving imports without extension.
+ * Remove import/export statements that reference a specific file.
+ * Handles both with and without file extensions.
  */
-const TS_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts']
+function cleanImportExport(content: string, fileBasename: string): string {
+  // Match various import/export patterns with or without extension
+  const patterns = [
+    // import xxx from './file'
+    `import\\s+.*\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`,
+    // export * from './file'
+    `export\\s+\\*\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`,
+    // export * as xxx from './file'
+    `export\\s+\\*\\s+as\\s+\\w+\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`,
+    // export { xxx } from './file'
+    `export\\s+\\{[^}]+\\}\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`,
+  ]
 
-/**
- * Try to resolve a path to a TypeScript file by adding extensions.
- * Returns the resolved path if found, or null if not found.
- */
-function tryResolveTs(basePath: string): string | null {
-  // If already has a TS extension, check if it exists
-  if (RE_TS.test(basePath)) {
-    return existsSync(basePath) ? basePath : null
+  let result = content
+  for (const pattern of patterns) {
+    result = result.replace(new RegExp(pattern, 'g'), '')
   }
-
-  // Try adding each extension
-  for (const ext of TS_EXTENSIONS) {
-    const pathWithExt = `${basePath}${ext}`
-    if (existsSync(pathWithExt)) {
-      return pathWithExt
-    }
-  }
-
-  // Try index files
-  for (const ext of TS_EXTENSIONS) {
-    const indexPath = resolve(basePath, `index${ext}`)
-    if (existsSync(indexPath)) {
-      return indexPath
-    }
-  }
-
-  return null
+  return result
 }
 
 export function dts(
@@ -107,8 +96,8 @@ export function dts(
               return
             processedFiles.add(filePath)
 
-            const dts = dtsMap.get(filePath)
-            if (!dts)
+            const dtsContent = dtsMap.get(filePath)
+            if (!dtsContent)
               return
 
             // Match both imports with and without .ts extension
@@ -116,7 +105,7 @@ export function dts(
             const imports: string[] = []
             let match: RegExpExecArray | null
             // eslint-disable-next-line no-cond-assign
-            while ((match = importRegex.exec(dts)) !== null) {
+            while ((match = importRegex.exec(dtsContent)) !== null) {
               const importPath = match[1]
               if (importPath && importPath.startsWith('.')) {
                 const basePath = resolve(dirname(filePath), importPath)
@@ -131,13 +120,10 @@ export function dts(
               collectDependencies(depPath)
             }
 
-            let cleanedDts = dts
+            // Clean all internal imports from the dts content
+            let cleanedDts = dtsContent
             for (const importPath of imports) {
-              // Get file name without extension for matching both './foo' and './foo.ts'
-              const fileBasename = parse(importPath).name
-              // Match imports with or without extension
-              cleanedDts = cleanedDts.replace(new RegExp(`import\\s+.*\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`, 'g'), '')
-              cleanedDts = cleanedDts.replace(new RegExp(`export\\s+.*\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`, 'g'), '')
+              cleanedDts = cleanImportExport(cleanedDts, parse(importPath).name)
             }
 
             const relativePath = relative(cwd, filePath).replace(/\\/g, '/')
@@ -151,19 +137,12 @@ export function dts(
             }
           }
 
+          // Clean imports from entrypoint's resolved files
           let entrypointDtsContent = entrypointDts
-          // Only clean imports from this entrypoint's resolved files.
           for (const filePath of entrypointResolvedFiles) {
             if (filePath === entrypointPath)
               continue
-            // Get file name without extension for matching both './foo' and './foo.ts'
-            const fileBasename = parse(filePath).name
-            // Match imports with or without extension
-            entrypointDtsContent = entrypointDtsContent.replace(new RegExp(`import\\s+.*\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`, 'g'), '')
-            entrypointDtsContent = entrypointDtsContent.replace(new RegExp(`export\\s+\\*\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`, 'g'), '')
-            // Match "export * as xxx from" syntax
-            entrypointDtsContent = entrypointDtsContent.replace(new RegExp(`export\\s+\\*\\s+as\\s+\\w+\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`, 'g'), '')
-            entrypointDtsContent = entrypointDtsContent.replace(new RegExp(`export\\s+\\{[^}]+\\}\\s+from\\s+['"]\\.\\/${fileBasename}(\\.tsx?)?['"];?\\s*`, 'g'), '')
+            entrypointDtsContent = cleanImportExport(entrypointDtsContent, parse(filePath).name)
           }
 
           const mergedDtsParts: string[] = []
