@@ -1,4 +1,4 @@
-import type { ResolvedDepFilesMap } from '../src/types.ts'
+import type { ResolvedModuleMap } from '../src/types.ts'
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,7 +8,7 @@ import { absolute } from '../src/utils.ts'
 
 describe('resolve', () => {
   const testDir = join(tmpdir(), 'resolve-test')
-  let resolvedFilesMap: ResolvedDepFilesMap
+  let resolvedFilesMap: ResolvedModuleMap
 
   beforeEach(() => {
     mkdirSync(testDir, { recursive: true })

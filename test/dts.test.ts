@@ -1,4 +1,4 @@
-import type { ResolvedDepFilesMap } from '../src/types.ts'
+import type { ResolvedModuleMap } from '../src/types.ts'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,8 +9,8 @@ import { absolute } from '../src/utils.ts'
 /**
  * Helper to create a ResolvedFilesMap from entrypoint and its files.
  */
-function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedDepFilesMap {
-  const map: ResolvedDepFilesMap = new Map()
+function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedModuleMap {
+  const map: ResolvedModuleMap = new Map()
   map.set(entrypoint, new Set(files))
   return map
 }
@@ -364,7 +364,7 @@ describe('dts', () => {
     writeFileSync(commandFile, 'export const run = (): void => {}')
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(commandFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -394,7 +394,7 @@ describe('dts', () => {
     writeFileSync(componentFile, 'export const Component = "tsx-component"')
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(componentFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -435,7 +435,7 @@ export { run }
 `)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(commandFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -487,7 +487,7 @@ export interface Comment {
 `)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -529,7 +529,7 @@ export { config }
 `)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(configFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -557,7 +557,7 @@ export { config }
     writeFileSync(entryFile, `export { internalName as publicName } from "./utils"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(utilsFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -591,7 +591,7 @@ export function unused(): void {}
     writeFileSync(entryFile, `export { greet } from "./func"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(funcFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -633,7 +633,7 @@ export class UnusedClass {}
     writeFileSync(entryFile, `export { MyClass } from "./MyClass"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(classFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -672,7 +672,7 @@ export enum UnusedEnum {
     writeFileSync(entryFile, `export { Status } from "./enums"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(enumFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -706,7 +706,7 @@ export type UnusedType = boolean
     writeFileSync(entryFile, `export type { ID } from "./types"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -744,7 +744,7 @@ export interface Extended extends Base {
     writeFileSync(entryFile, `export type { Extended } from "./types"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -787,7 +787,7 @@ export interface Unused {
     writeFileSync(entryFile, `export type { Config } from "./types"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -823,7 +823,7 @@ export type AsyncResult<T> = Promise<Result<T>>
     writeFileSync(entryFile, `export type { Result, AsyncResult } from "./types"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -862,7 +862,7 @@ export { DEFAULT_OPTIONS, configure } from "./module"
 `)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(moduleFile)]))
     const entrypointPaths = [entrypointPath]
 
@@ -900,7 +900,7 @@ export { DEFAULT_OPTIONS, configure } from "./module"
     writeFileSync(entryFile, `export { deepValue } from "./a"`)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([
       entrypointPath,
       absolute(aFile),
@@ -943,7 +943,7 @@ export class App {
 `)
 
     const entrypointPath = absolute(entryFile)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath]))
     const entrypointPaths = [entrypointPath]
 
@@ -978,7 +978,7 @@ export class App {
 
     const entry1Path = absolute(entry1File)
     const entry2Path = absolute(entry2File)
-    const resolvedFilesMap: ResolvedDepFilesMap = new Map()
+    const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entry1Path, new Set([entry1Path, absolute(utils1File)]))
     resolvedFilesMap.set(entry2Path, new Set([entry2Path, absolute(utils2File)]))
     const entrypointPaths = [entry1Path, entry2Path]

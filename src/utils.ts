@@ -1,7 +1,7 @@
 import process from 'node:process'
-import { resolve } from 'pathe'
+import { normalize, resolve } from 'pathe'
 
-export const cwd = process.cwd()
+export const cwd = normalize(process.cwd())
 
 export function absolute(path: string): string {
   return resolve(cwd, path)

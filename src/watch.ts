@@ -1,5 +1,5 @@
 import type { BunPlugin } from 'bun'
-import type { ResolvedDepFilesMap } from './types.ts'
+import type { ResolvedModuleMap } from './types.ts'
 import fs from 'node:fs'
 
 export interface WatchOptions {
@@ -10,7 +10,7 @@ export interface WatchOptions {
 /**
  * Get all resolved dependent files from the map (union of all entrypoints' dependent files).
  */
-function getAllAbsResolvedDepFiles(resolvedDepFilesMap: ResolvedDepFilesMap): Set<string> {
+function getAllAbsResolvedDepFiles(resolvedDepFilesMap: ResolvedModuleMap): Set<string> {
   const allFiles = new Set<string>()
   for (const files of resolvedDepFilesMap.values()) {
     for (const file of files)
@@ -21,7 +21,7 @@ function getAllAbsResolvedDepFiles(resolvedDepFilesMap: ResolvedDepFilesMap): Se
 
 export function watch(
   options: WatchOptions = {},
-  resolvedDepFilesMap: ResolvedDepFilesMap,
+  resolvedDepFilesMap: ResolvedModuleMap,
 ): BunPlugin {
   const { onRebuild, debounce = 50 } = options
   let rebuildFn: (() => Promise<void>) | null = null

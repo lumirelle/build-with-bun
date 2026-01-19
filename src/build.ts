@@ -1,9 +1,10 @@
 /* eslint-disable no-console */
 import type { BuildOutput } from 'bun'
-import type { ResolvedDepFilesMap } from './types.ts'
+import type { ResolvedModuleMap } from './types.ts'
 import { existsSync, rmSync } from 'node:fs'
 import { styleText } from 'node:util'
-import { absolute, formatDuration } from './utils.ts'
+import { resolve } from 'pathe'
+import { cwd, formatDuration } from './utils.ts'
 
 type BuildConfig = Parameters<typeof Bun.build>[0] & {
   /**
@@ -59,13 +60,14 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   const startTime = performance.now()
 
   const {
+    root,
+    outdir,
+    clean = true,
     watch,
     afterBuild,
-    outdir,
     dts = true,
     plugins = [],
     sourcemap = watch ? 'external' : 'none',
-    clean = true,
     packages = 'external',
     ...rest
   } = config
@@ -73,19 +75,27 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   if (clean && outdir && existsSync(outdir))
     rmSync(outdir, { recursive: true, force: true })
 
-  const absEntrypoints = config.entrypoints.map(e => absolute(e))
   /**
-   * Map from absolute entrypoint path to its resolved dependent files. Each entrypoint tracks its own set of dependent files.
+   * Entrypoint paths resolved based on the root directory.
    */
-  const resolvedDepFilesMap: ResolvedDepFilesMap = new Map<string, Set<string>>()
+  const entrypoints = config.entrypoints.map(entry => root ? resolve(root, entry) : resolve(cwd, entry))
+  /**
+   * Map from entrypoint path to its dependent (relative) module paths. Resolved based on the root directory.
+   */
+  const resolvedModuleMap: ResolvedModuleMap = new Map<string, Set<string>>()
+  /**
+   * Set of all resolved module paths.
+   */
+  const resolvedModules = new Set<string>()
 
   if (dts || watch)
-    plugins.push((await import('./resolve.ts')).resolve(absEntrypoints, resolvedDepFilesMap))
+    plugins.push((await import('./resolve.ts')).resolve(root, entrypoints, resolvedModuleMap, resolvedModules))
 
   if (dts)
-    plugins.push((await import('./dts.ts')).dts(absEntrypoints, resolvedDepFilesMap))
+    plugins.push((await import('./dts.ts')).dts(root, entrypoints, resolvedModules))
 
-  const buildConfig = {
+  const bunConfig = {
+    root,
     outdir,
     plugins,
     sourcemap,
@@ -99,23 +109,24 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
         onRebuild: async () => {
           const rebuildStartTime = performance.now()
           console.info('💤 File changed, rebuilding...')
-          const output = await Bun.build(buildConfig)
+
+          const output = await Bun.build(bunConfig)
           await afterBuild?.(output)
+
           const rebuildEndTime = performance.now()
-          const rebuildDuration = rebuildEndTime - rebuildStartTime
-          console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildDuration))}`)
+          const rebuildCostTime = rebuildEndTime - rebuildStartTime
+          console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildCostTime))}`)
         },
-      }, resolvedDepFilesMap),
+      }, resolvedModuleMap),
     )
   }
 
-  const output = await Bun.build(buildConfig)
-
+  const output = await Bun.build(bunConfig)
   await afterBuild?.(output)
 
   const endTime = performance.now()
-  const duration = endTime - startTime
-  console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(duration))}`)
+  const costTime = endTime - startTime
+  console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(costTime))}`)
 
   return output
 }

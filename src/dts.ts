@@ -1,11 +1,9 @@
 import type { BunPlugin } from 'bun'
-import type { ResolvedDepFilesMap } from './types.ts'
-import process from 'node:process'
 import { parseSync } from 'oxc-parser'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import { basename, dirname, join, normalize, relative, resolve } from 'pathe'
 import { RE_TS } from './filename.ts'
-import { absolute } from './utils.ts'
+import { absolute, cwd } from './utils.ts'
 
 interface DeclarationInfo {
   name: string
@@ -77,7 +75,7 @@ function extractDeclarations(code: string): Map<string, DeclarationInfo> {
 }
 
 /**
- * Now only support relative imports starting with `.` or `..`.
+ * TODO(Lumirelle): Now only support relative imports starting with `.` or `..`.
  */
 function isRelativeImportExport(path: string): boolean {
   return path.startsWith('.')
@@ -91,41 +89,48 @@ interface ParseResult {
   type: 'import' | 'export'
   modulePath: string
   isRelative: boolean
+  isTypeOnly: boolean
   members: string[]
+  code: string
 }
 
 function parseImportExport(type: 'import' | 'export', line: string): ParseResult {
   let regex: RegExp
   if (type === 'import')
-    regex = /^import (.*) from ['"](.*)['"];?$/i
+    regex = /^import (type )?(.*?) from ['"](.*?)['"];?$/i
   else if (type === 'export')
-    regex = /^export (.*) from ['"](.*)['"];?$/i
+    regex = /^export (type )?(.*?) from ['"](.*?)['"];?$/i
   else
     throw new Error(`Invalid type: ${type}`)
 
   const result = regex.exec(line)
 
+  const isTypeOnly = !!result?.[1]
+
   const r: ParseResult = {
     type,
     modulePath: '',
     isRelative: false,
+    isTypeOnly,
     members: [],
+    code: line,
   }
 
-  r.modulePath = result?.[2] ?? ''
+  r.modulePath = result?.[3] ?? ''
 
   // If not relative import, return early.
   r.isRelative = isRelativeImportExport(r.modulePath)
   if (!r.isRelative)
     return r
 
-  let membersStr = result?.[1]?.trim() ?? ''
+  let membersStr = result?.[2]?.trim() ?? ''
   if (membersStr.includes('*')) {
     r.members = ['*']
   }
   else {
+    // TODO(Lumirelle): Better way to parse members than string manipulation?
     // Remove curly braces if present (e.g., `{ Foo, Bar }` -> `Foo, Bar`)
-    if (membersStr.startsWith('{') && membersStr.endsWith('}'))
+    if (membersStr.startsWith('{'))
       membersStr = membersStr.slice(1, -1).trim()
     // Split by commas and trim each member.
     r.members = membersStr.split(',').map((m) => {
@@ -237,20 +242,17 @@ function collectTypeReferences(node: any): Set<string> {
  */
 function extractRequestedDts(
   dts: string,
-  declarations: Map<string, DeclarationInfo> | null | undefined,
+  declarations: Map<string, DeclarationInfo>,
   requestedMembers: string[],
   type: 'import' | 'export',
 ): string {
-  if (!declarations) {
-    console.error(`Declarations not found for module dts: ${dts}`)
-    return dts
-  }
-
   // If importing everything (*), return the full dts.
   if (requestedMembers.includes('*'))
     return dts
 
-  // Collect all needed members (requested + their dependencies)
+  /**
+   * Requested members and their dependencies.
+   */
   const neededMembers = new Set<string>()
   const queue = [...requestedMembers]
 
@@ -267,7 +269,7 @@ function extractRequestedDts(
     neededMembers.add(member)
     // Add type references to the queue
     for (const ref of declaration.typeRefs) {
-      // Only add if not already needed and if the declaration exists (who is not external).
+      // Only add if not already needed and if the declaration exists in that module.
       if (!neededMembers.has(ref) && declarations.has(ref))
         queue.push(ref)
     }
@@ -280,6 +282,7 @@ function extractRequestedDts(
     const trimmed = line.trim()
     if (trimmed.match(/^import .* from ['"].*['"];?$/i) || trimmed.match(/^export .* from ['"].*['"];?$/i))
       resultParts.push(line)
+    // TODO(Lumirelle): Or break? If the dts code hoist the import/export statements, we can break here for better performance.
   }
   // Collect the code for all needed members
   for (const [name, declaration] of declarations) {
@@ -296,74 +299,108 @@ function extractRequestedDts(
 }
 
 /**
- * Inline all the dts of inlined modules of one module recursively.
+ * Inline all the `dts` code of dependent modules start from entrypoint recursively.
+ *
+ * @param entrypoint The entrypoint to start from.
+ * @param dtsMap The map of module paths to their dts.
+ * @param declarationMap The map of module paths to their declaration map.
+ * @param typeRefsMap The map of module paths to their type references.
+ * @returns The inline `dts` code of the entrypoint.
  */
 function inlineModuleDtsRecursive(
-  root: string,
   entrypoint: string,
   dtsMap: Map<string, string>,
   declarationMap: Map<string, Map<string, DeclarationInfo>>,
   typeRefsMap: Map<string, Set<string>>,
 ): string {
-  const entryDts = dtsMap.get(entrypoint) ?? ''
-  const entryDtsLines = entryDts.split('\n')
+  const entryDts = dtsMap.get(entrypoint)
+  const entrypointDir = dirname(entrypoint)
+
+  if (!entryDts) {
+    console.error(`Entrypoint dts code not found: ${entrypoint}`)
+    return ''
+  }
+
+  const entryDtsLines = entryDts.split('\n').filter(Boolean)
   const entryTypeRefs = typeRefsMap.get(entrypoint)
 
-  for (let i = 0; i < entryDtsLines.length; i++) {
+  let i = 0
+  while (i < entryDtsLines.length) {
     const trimmedLine = entryDtsLines[i]!.trim()
 
     // Parse import/export statement.
     let result: ParseResult
-    if (trimmedLine.match(/^import .*$/i)) {
+    if (trimmedLine.match(/^import .*? from ['"].*?['"];?$/i)) {
       result = parseImportExport('import', trimmedLine)
       // Filter out non-referenced import members.
       result.members = result.members.filter(m => entryTypeRefs?.has(m))
     }
-    else if (trimmedLine.match(/^export .*$/i)) {
+    else if (trimmedLine.match(/^export .*? from ['"].*?['"];?$/i)) {
       result = parseImportExport('export', trimmedLine)
       // All export members are referenced.
     }
     else {
+      i++
       continue
+      // TODO(Lumirelle): Or break? If the dts code hoist the import/export statements, we can break here for better performance.
     }
 
     // Skip non-relative imports.
-    if (!result.isRelative)
+    if (!result.isRelative) {
+      i++
       continue
+    }
+
+    entryDtsLines.splice(i, 1)
 
     // Process relative import/export statement.
-    const absModulePath = resolve(dirname(entrypoint), result.modulePath)
-    const moduleDts = dtsMap.get(absModulePath) ?? '// MISSING MODULE DTS'
-    const moduleDeclarations = declarationMap.get(absModulePath)
-    // Remove the import/export statement.
-    entryDtsLines.splice(i, 1)
-    // Replace with the module dts - only include members that are referenced.
-    const filteredDts = extractRequestedDts(
-      moduleDts,
-      moduleDeclarations,
-      result.members,
-      result.type,
-    )
+    const modulePath = resolve(entrypointDir, result.modulePath)
+    let moduleDts = dtsMap.get(modulePath)
+    if (!moduleDts)
+      moduleDts = '// MISSING MODULE DTS'
+    const moduleDeclarations = declarationMap.get(modulePath)
+
+    let filteredDts = moduleDts
+    if (moduleDeclarations) {
+      // Replace with the module dts - only include members that are referenced.
+      filteredDts = extractRequestedDts(
+        moduleDts,
+        moduleDeclarations,
+        result.members,
+        result.type,
+      )
+    }
 
     // Add the module dts to the entry dts.
-    entryDtsLines.push(`// ${relative(root, absModulePath)}`, ...filteredDts.split('\n'))
+    entryDtsLines.push('', `// ${relative(cwd, modulePath)}`, ...filteredDts.split('\n'))
   }
 
   return entryDtsLines.join('\n')
 }
 
+/**
+ * Generate `.d.ts` files for entrypoints (Using `oxc-transform` and `oxc-parser`).
+ *
+ * @param root The root directory of the project.
+ * @param entrypoints The entrypoints to generate `.d.ts` files for.
+ * @param resolvedModules The set of all resolved module paths.
+ */
 export function dts(
-  absEntrypoints: string[],
-  resolvedDepFilesMap: ResolvedDepFilesMap,
+  root: string | undefined,
+  entrypoints: string[],
+  resolvedModules: Set<string>,
 ): BunPlugin {
   /**
-   * A map from file path to its isolated declaration.
+   * A map from module path to its isolated declaration.
    */
   const dtsMap = new Map<string, string>()
   /**
-   * A map from file path to its declaration info.
+   * A map from module path to its declaration map.
    */
   const declarationMap = new Map<string, Map<string, DeclarationInfo>>()
+  /**
+   * A map from module path to its all type references.
+   */
   const typeRefsMap = new Map<string, Set<string>>()
 
   return {
@@ -372,7 +409,6 @@ export function dts(
       if (!builder.config.outdir)
         return
 
-      const root = builder.config.root ?? process.cwd()
       const outPath = absolute(builder.config.outdir)
 
       builder.onStart(() => {
@@ -381,21 +417,17 @@ export function dts(
         typeRefsMap.clear()
       })
 
-      // Use `oxc-transform` to generate isolated declaration for each file.
+      // Use `oxc-transform` to generate isolated declaration for each TypeScript file.
       builder.onLoad({ filter: RE_TS }, async (args) => {
+        // Notice, `argsPath` is absolute.
         const argsPath = normalize(args.path)
 
-        // Check if this file belongs to any entrypoint's resolved files.
-        let isRelevant = false
-        for (const files of resolvedDepFilesMap.values()) {
-          if (files.has(argsPath)) {
-            isRelevant = true
-            break
-          }
-        }
-        // Notice, `args.path` is absolute.
-        if (!isRelevant || dtsMap.has(argsPath))
+        if (
+          (!entrypoints.includes(argsPath) && !resolvedModules.has(argsPath))
+          || dtsMap.has(argsPath)
+        ) {
           return
+        }
 
         const { code: dts } = isolatedDeclarationSync(
           argsPath,
@@ -411,9 +443,13 @@ export function dts(
 
       // Composite all isolated declarations into dts files for each entrypoint.
       builder.onEnd(async () => {
-        for (const entrypoint of absEntrypoints) {
-          const dts = inlineModuleDtsRecursive(root, entrypoint, dtsMap, declarationMap, typeRefsMap)
-          const outFilePath = join(outPath, basename(entrypoint).replace(RE_TS, '.d.ts'))
+        for (const entrypoint of entrypoints) {
+          const dts = inlineModuleDtsRecursive(entrypoint, dtsMap, declarationMap, typeRefsMap)
+          const outFile = entrypoint.replace(RE_TS, '.d.ts')
+          const outFilePath = join(
+            outPath,
+            root ? relative(root, outFile) : basename(outFile),
+          )
           await Bun.write(outFilePath, dts.trim())
         }
       })

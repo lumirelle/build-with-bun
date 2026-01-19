@@ -1,55 +1,65 @@
+/**
+ * @file A bun build plugin to record dependent (relative) module paths of each entrypoint.
+ */
+
 import type { BunPlugin } from 'bun'
-import type { ResolvedDepFilesMap } from './types.ts'
-import { dirname, isAbsolute, normalize, resolve as pathResolve } from 'pathe'
-import { RE_RELATIVE, RE_TS, tryResolveTs } from './filename.ts'
-import { absolute } from './utils.ts'
+import type { ResolvedModuleMap } from './types.ts'
+import { dirname, isAbsolute, resolve as pathResolve } from 'pathe'
+import { RE_RELATIVE, tryResolveTs } from './filename.ts'
+import { cwd } from './utils.ts'
 
 /**
- * Resolve the dependent files of the entrypoints. Each entrypoint tracks its own set of dependent files.
+ * Resolve the dependent (relative) module paths of each entrypoint.
+ *
+ * @param root The root directory of the project.
+ * @param entrypoints The entrypoints to resolve.
+ * @param resolvedModuleMap The map to record the dependent (relative) module paths of each entrypoint.
  */
 export function resolve(
-  absEntrypoints: string[],
-  resolvedDepFilesMap: ResolvedDepFilesMap,
+  root: string | undefined,
+  entrypoints: string[],
+  resolvedModuleMap: ResolvedModuleMap,
+  resolvedModules: Set<string>,
 ): BunPlugin {
   /**
-   * Map from a file path to its entrypoint. Used to trace back the entrypoint of a file.
+   * Map from a module path to its entrypoint. Used to trace back the entrypoint of a module.
    */
-  const pathToEntrypoint = new Map<string, string>()
+  const moduleToEntrypoint = new Map<string, string>()
 
   /**
-   * Handle resolve event and track dependent files.
+   * Handle resolve event and track dependent (relative) module paths.
    */
   const handleResolve = (args: { path: string, importer: string }): undefined => {
-    // Importer path is the file that is importing the current file.
-    const importerPath = args.importer ? normalize(absolute(args.importer)) : null
-    if (!importerPath)
+    if (!args.importer)
       return undefined
+    const importer = root ? pathResolve(root, args.importer) : pathResolve(cwd, args.importer)
 
     // Find which entrypoint this importer belongs to.
-    const entrypoint = pathToEntrypoint.get(importerPath)
-    if (!entrypoint)
+    const entrypoint = moduleToEntrypoint.get(importer)
+    if (!entrypoint) {
+      console.error(`Failed to find entrypoint for importer ${importer}`)
       return undefined
+    }
 
     const basePath = isAbsolute(args.path)
       ? args.path
-      : pathResolve(dirname(importerPath), args.path)
+      : pathResolve(dirname(importer), args.path)
 
     // Try to resolve to an actual TypeScript file
     const resolvedPath = tryResolveTs(basePath)
     if (!resolvedPath)
       return undefined
 
-    // Add to the entrypoint's resolved files.
-    const entrypointFiles = resolvedDepFilesMap.get(entrypoint)
-    if (entrypointFiles)
-      entrypointFiles.add(resolvedPath)
-    else
-      resolvedDepFilesMap.set(entrypoint, new Set([resolvedPath]))
-
     // Map the resolved file to its entrypoint.
     // Note: A file may be shared by multiple entrypoints, we keep the first mapping.
-    if (!pathToEntrypoint.has(resolvedPath))
-      pathToEntrypoint.set(resolvedPath, entrypoint)
+    if (!moduleToEntrypoint.has(resolvedPath))
+      moduleToEntrypoint.set(resolvedPath, entrypoint)
+
+    // Add to the entrypoint's resolved files.
+    // If `entrypoint` exists, then `resolvedModuleMap.get(entrypoint)` is guaranteed to be a Set.
+    resolvedModuleMap.get(entrypoint)!.add(resolvedPath)
+
+    resolvedModules.add(resolvedPath)
 
     return undefined
   }
@@ -58,19 +68,17 @@ export function resolve(
     name: 'resolve',
     setup(builder) {
       builder.onStart(() => {
-        resolvedDepFilesMap.clear()
-        pathToEntrypoint.clear()
+        moduleToEntrypoint.clear()
+        resolvedModuleMap.clear()
         // Initialize each entrypoint with its own Set and map to itself.
-        for (const entrypoint of absEntrypoints) {
-          resolvedDepFilesMap.set(entrypoint, new Set([entrypoint]))
-          pathToEntrypoint.set(entrypoint, entrypoint)
+        for (const entrypoint of entrypoints) {
+          moduleToEntrypoint.set(entrypoint, entrypoint)
+          resolvedModuleMap.set(entrypoint, new Set([entrypoint]))
         }
       })
 
-      // Handle imports with explicit .ts/.tsx extension
-      builder.onResolve({ filter: RE_TS }, handleResolve)
-
-      // Handle relative imports without extension (e.g., './command')
+      // Handle all relative imports (E.g., './command', './command.ts', './command.tsx', etc.).
+      // TODO(Lumirelle): Path alias in `tsconfig.json` is not supported yet.
       builder.onResolve({ filter: RE_RELATIVE }, handleResolve)
     },
   }
