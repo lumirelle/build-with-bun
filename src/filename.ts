@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 
 /**
  * Match TypeScript file extensions (.ts, .tsx, .mts, .cts)

@@ -1,9 +1,47 @@
 import type { BunPlugin } from 'bun'
 import type { ResolvedDepFilesMap } from './types.ts'
-import { basename, join } from 'node:path'
+import process from 'node:process'
 import { isolatedDeclarationSync } from 'oxc-transform'
+import { basename, dirname, join, normalize, relative, resolve } from 'pathe'
 import { RE_TS } from './filename.ts'
 import { absolute } from './utils.ts'
+
+/**
+ * Now only support relative imports starting with `.` or `..`.
+ */
+function isRelativeImport(path: string): boolean {
+  return path.startsWith('.')
+    || path.startsWith('..')
+    // || path.startsWith('@')
+    // || path.startsWith('~')
+    // ...
+}
+
+/**
+ * Inline all the dts of inlined modules of one module recursively.
+ */
+function inlineModuleDtsRecursive(root: string, path: string, dtsMap: Map<string, string>): string {
+  const code = dtsMap.get(path) ?? ''
+  const lines = code.split('\n')
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+
+    let modulePath = ''
+    if (trimmedLine.match(/^import .*$/i))
+      modulePath = trimmedLine.replace(/^import .* from ['"](.*)['"];?/i, '$1')
+    if (trimmedLine.match(/^export .*$/i))
+      modulePath = trimmedLine.replace(/^export .* from ['"](.*)['"];?/i, '$1')
+    // Filter out non-relative imports.
+    if (isRelativeImport(modulePath)) {
+      const absModulePath = resolve(dirname(path), modulePath)
+      const moduleCode = dtsMap.get(absModulePath) ?? '// MISSING MODULE DTS'
+      lines.push(`// ${relative(root, absModulePath)}`, ...moduleCode.split('\n'))
+    }
+  }
+
+  return lines.join('\n')
+}
 
 export function dts(
   absEntrypoints: string[],
@@ -26,27 +64,33 @@ export function dts(
         dtsMap.clear()
       })
 
+      // Use `oxc-transform` to generate isolated declaration for each file.
       builder.onLoad({ filter: RE_TS }, async (args) => {
+        const argsPath = normalize(args.path)
+
         // Check if this file belongs to any entrypoint's resolved files.
         let isRelevant = false
         for (const files of resolvedDepFilesMap.values()) {
-          if (files.has(args.path)) {
+          if (files.has(argsPath)) {
             isRelevant = true
             break
           }
         }
-        if (!isRelevant || dtsMap.has(args.path))
+        // Notice, `args.path` is absolute.
+        if (!isRelevant || dtsMap.has(argsPath))
           return
         const { code } = isolatedDeclarationSync(
-          args.path,
-          await Bun.file(args.path).text(),
+          argsPath,
+          await Bun.file(argsPath).text(),
         )
-        dtsMap.set(args.path, code)
+        dtsMap.set(argsPath, code)
       })
 
+      // Composite all isolated declarations into dts files for each entrypoint.
       builder.onEnd(async () => {
-        for (const [filePath, code] of dtsMap.entries()) {
-          const outFilePath = join(outPath, basename(filePath).replace(RE_TS, '.d.ts'))
+        for (const entrypoint of absEntrypoints) {
+          const code = inlineModuleDtsRecursive(builder.config.root ?? process.cwd(), entrypoint, dtsMap)
+          const outFilePath = join(outPath, basename(entrypoint).replace(RE_TS, '.d.ts'))
           await Bun.write(outFilePath, code)
         }
       })

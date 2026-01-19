@@ -17,6 +17,7 @@
         "eslint-plugin-format": "catalog:check",
         "knip": "catalog:check",
         "lint-staged": "catalog:check",
+        "pathe": "catalog:inlined",
         "publint": "catalog:check",
         "simple-git-hooks": "catalog:dev",
         "typescript": "catalog:dev",
@@ -41,6 +42,7 @@
     },
     "inlined": {
       "@antfu/utils": "^9.3.0",
+      "pathe": "^2.0.3",
     },
     "prod": {
       "oxc-transform": "^0.108.0",

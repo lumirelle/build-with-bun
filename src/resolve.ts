@@ -1,6 +1,6 @@
 import type { BunPlugin } from 'bun'
 import type { ResolvedDepFilesMap } from './types.ts'
-import { dirname, isAbsolute, resolve as pathResolve } from 'node:path'
+import { dirname, isAbsolute, normalize, resolve as pathResolve } from 'pathe'
 import { RE_RELATIVE, RE_TS, tryResolveTs } from './filename.ts'
 import { absolute } from './utils.ts'
 
@@ -21,7 +21,7 @@ export function resolve(
    */
   const handleResolve = (args: { path: string, importer: string }): undefined => {
     // Importer path is the file that is importing the current file.
-    const importerPath = args.importer ? absolute(args.importer) : null
+    const importerPath = args.importer ? normalize(absolute(args.importer)) : null
     if (!importerPath)
       return undefined
 

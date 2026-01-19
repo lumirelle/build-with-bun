@@ -1,5 +1,5 @@
-import { resolve } from 'node:path'
 import process from 'node:process'
+import { resolve } from 'pathe'
 
 export const cwd = process.cwd()
 
