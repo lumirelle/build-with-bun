@@ -9,6 +9,11 @@
 
 A utils for building JS/TS projects with bun.
 
+## Todos
+
+- [ ] Support type imports/exports.
+- [ ] ...
+
 ## Sponsors
 
 <p align="center">
