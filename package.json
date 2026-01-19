@@ -51,6 +51,7 @@
         "pathe": "^2.0.3"
       },
       "prod": {
+        "oxc-parser": "^0.108.0",
         "oxc-transform": "^0.108.0"
       },
       "check": {
@@ -71,6 +72,7 @@
     }
   },
   "dependencies": {
+    "oxc-parser": "catalog:prod",
     "oxc-transform": "catalog:prod"
   },
   "devDependencies": {
