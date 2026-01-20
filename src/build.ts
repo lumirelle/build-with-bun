@@ -73,7 +73,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   } = config
 
   if (clean && outdir && existsSync(outdir))
-    rmSync(outdir, { recursive: true, force: true })
+    rmSync(outdir, { recursive: true })
 
   /**
    * Entrypoint paths resolved based on the root directory.
