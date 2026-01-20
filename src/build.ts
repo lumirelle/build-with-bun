@@ -3,25 +3,33 @@ import type { BuildOutput } from 'bun'
 import type { ResolvedModuleMap } from './types.ts'
 import { existsSync, rmSync } from 'node:fs'
 import { styleText } from 'node:util'
-import { resolve } from 'pathe'
-import { cwd, formatDuration } from './utils.ts'
+import { formatDuration, resolveCwd } from './utils.ts'
 
-type BuildConfig = Parameters<typeof Bun.build>[0] & {
+type BuildConfig = Bun.BuildConfig & {
+  // Below are `Bun.BuildConfig` options with some modifications or clarifications
+
   /**
-   * Watch for file changes and rebuild automatically.
-   * Files to watch are automatically resolved from entrypoints.
-   */
-  watch?: boolean
-  /**
-   * Generate .d.ts files for entrypoints (Using `oxc-transform`).
+   * An array of paths corresponding to the entrypoints of our application. One bundle will be generated for each entrypoint.
    *
-   * @default true
+   * Relative paths are resolved based on `CWD`.
    */
-  dts?: boolean
+  entrypoints: Bun.BuildConfig['entrypoints']
   /**
-   * Callback function to be called after the build is complete.
+   * The root directory of the project.
+   *
+   * @default The common ancestor directory of all entrypoints
+   * @see https://bun.com/docs/bundler#root
    */
-  afterBuild?: (output: BuildOutput) => Promise<void> | void
+  root?: Bun.BuildConfig['root']
+  /**
+   * The directory where output files will be written.
+   *
+   * If outdir is not passed to the JavaScript API, bundled code will not be written to disk. Bundled files are returned in an array of BuildArtifact objects. These objects are Blobs with extra properties; see Outputs for complete documentation.
+   *
+   * @see https://bun.com/docs/bundler#outdir
+   * @see https://bun.com/docs/bundler#outputs
+   */
+  outdir?: Bun.BuildConfig['outdir']
   /**
    * Specifies if and how to generate source maps.
    *
@@ -36,11 +44,20 @@ type BuildConfig = Parameters<typeof Bun.build>[0] & {
    * `true` and `false` are aliases for `"inline"` and `"none"`, respectively.
    *
    * @default "none" or "external" if `watch` is `true`
-   *
    * @see {@link outdir} required for `"linked"` maps
    * @see {@link publicPath} to customize the base url of linked source maps
    */
-  sourcemap?: 'none' | 'linked' | 'inline' | 'external' | boolean
+  sourcemap?: Bun.BuildConfig['sourcemap']
+  /**
+   * Control whether package dependencies are included to bundle or not.
+   * Bun treats any import which path do not start with `.`, `..` or `/` as package.
+   *
+   * @default "external"
+   */
+  packages?: Bun.BuildConfig['packages']
+
+  // Below is additional options
+
   /**
    * Clean the output directory before building.
    *
@@ -48,24 +65,51 @@ type BuildConfig = Parameters<typeof Bun.build>[0] & {
    */
   clean?: boolean
   /**
-   * Control whether package dependencies are included to bundle or not.
-   * Bun treats any import which path do not start with `.`, `..` or `/` as package.
+   * Generate .d.ts files for entrypoints (Using `oxc-transform`).
    *
-   * @default "external"
+   * TODO(Lumirelle): Support `splitting` option.
+   *
+   * @default true
    */
-  packages?: 'bundle' | 'external'
+  dts?: boolean
+  /**
+   * Watch for file changes and rebuild automatically.
+   *
+   * @default false
+   */
+  watch?: boolean
+  /**
+   * Callback function to be called after the build is complete.
+   */
+  afterBuild?: (output: BuildOutput) => Promise<void> | void
+  /**
+   * Suppress build output logs.
+   *
+   * @default false
+   */
+  silent?: boolean
+  /**
+   * Used for testing purposes only. When enabled, build will return some extra debug output.
+   *
+   * @internal
+   */
+  test?: boolean
 }
 
 export async function build(config: BuildConfig): Promise<BuildOutput> {
   const startTime = performance.now()
 
   const {
-    root,
+    entrypoints,
     outdir,
+    // Below is additional options
     clean = true,
-    watch,
-    afterBuild,
     dts = true,
+    afterBuild,
+    watch,
+    silent,
+    test,
+    // Above is additional options
     plugins = [],
     sourcemap = watch ? 'external' : 'none',
     packages = 'external',
@@ -76,26 +120,35 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     rmSync(outdir, { recursive: true })
 
   /**
-   * Entrypoint paths resolved based on the root directory.
+   * Absolute entrypoint paths.
    */
-  const entrypoints = config.entrypoints.map(entry => root ? resolve(root, entry) : resolve(cwd, entry))
+  const absoluteEntrypoints = config.entrypoints.map(entry => resolveCwd(entry))
   /**
    * Map from entrypoint path to its dependent (relative) module paths. Resolved based on the root directory.
    */
   const resolvedModuleMap: ResolvedModuleMap = new Map<string, Set<string>>()
   /**
-   * Set of all resolved module paths.
+   * Set of paths for all resolved modules.
    */
   const resolvedModules = new Set<string>()
 
-  if (dts || watch)
-    plugins.push((await import('./resolve.ts')).resolve(root, entrypoints, resolvedModuleMap, resolvedModules))
+  if (dts || watch) {
+    plugins.push((await import('./resolve.ts')).resolve(
+      absoluteEntrypoints,
+      resolvedModuleMap,
+      resolvedModules,
+    ))
+  }
 
-  if (dts)
-    plugins.push((await import('./dts.ts')).dts(root, entrypoints, resolvedModules))
+  if (dts) {
+    plugins.push((await import('./dts.ts')).dts(
+      absoluteEntrypoints,
+      resolvedModules,
+    ))
+  }
 
   const bunConfig = {
-    root,
+    entrypoints,
     outdir,
     plugins,
     sourcemap,
@@ -108,14 +161,16 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
       (await import('./watch.ts')).watch({
         onRebuild: async () => {
           const rebuildStartTime = performance.now()
-          console.info('💤 File changed, rebuilding...')
+          if (!silent)
+            console.info(styleText('yellow', '⭮ Rebuilding...'))
 
           const output = await Bun.build(bunConfig)
           await afterBuild?.(output)
 
           const rebuildEndTime = performance.now()
           const rebuildCostTime = rebuildEndTime - rebuildStartTime
-          console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildCostTime))}`)
+          if (!silent)
+            console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildCostTime))}`)
         },
       }, resolvedModuleMap),
     )
@@ -126,7 +181,14 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
   const endTime = performance.now()
   const costTime = endTime - startTime
-  console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(costTime))}`)
+  if (!silent)
+    console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(costTime))}`)
 
+  if (test) {
+    // @ts-expect-error internal testing only
+    output._absoluteEntrypoints = absoluteEntrypoints
+    // @ts-expect-error internal testing only
+    output._resolvedEntrypoints = absoluteEntrypoints
+  }
   return output
 }

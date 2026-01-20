@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolve } from '../src/resolve.ts'
-import { absolute } from '../src/utils.ts'
+import { resolveCwd } from '../src/utils.ts'
 
 describe('resolve', () => {
   const testDir = join(tmpdir(), 'resolve-test')
@@ -19,7 +19,7 @@ describe('resolve', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPaths = [absolute(entryFile)]
+    const entrypointPaths = [resolveCwd(entryFile)]
     const plugin = resolve(resolvedFilesMap, entrypointPaths)
 
     const startCallbacks: Array<() => void> = []
@@ -36,9 +36,9 @@ describe('resolve', () => {
     plugin.setup(builder)
     startCallbacks.forEach(cb => cb())
 
-    const entrypointFiles = resolvedFilesMap.get(absolute(entryFile))
+    const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
     expect(entrypointFiles).toBeDefined()
-    expect(entrypointFiles?.has(absolute(entryFile))).toBe(true)
+    expect(entrypointFiles?.has(resolveCwd(entryFile))).toBe(true)
   })
 
   it('should resolve dependencies from entrypoints', () => {
@@ -47,7 +47,7 @@ describe('resolve', () => {
     writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
     writeFileSync(utilsFile, 'export const foo = "bar"')
 
-    const entrypointPaths = [absolute(entryFile)]
+    const entrypointPaths = [resolveCwd(entryFile)]
     const plugin = resolve(resolvedFilesMap, entrypointPaths)
 
     const startCallbacks: Array<() => void> = []
@@ -76,8 +76,8 @@ describe('resolve', () => {
       })
 
       expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(absolute(entryFile))
-      expect(entrypointFiles?.has(absolute(utilsFile))).toBe(true)
+      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
+      expect(entrypointFiles?.has(resolveCwd(utilsFile))).toBe(true)
     }
   })
 
@@ -87,7 +87,7 @@ describe('resolve', () => {
     writeFileSync(entryFile, 'export const hello = "world"')
     writeFileSync(otherFile, 'export const other = "value"')
 
-    const entrypointPaths = [absolute(entryFile)]
+    const entrypointPaths = [resolveCwd(entryFile)]
     const plugin = resolve(resolvedFilesMap, entrypointPaths)
 
     const startCallbacks: Array<() => void> = []
@@ -116,8 +116,8 @@ describe('resolve', () => {
       })
 
       expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(absolute(entryFile))
-      expect(entrypointFiles?.has(absolute(otherFile))).toBe(false)
+      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
+      expect(entrypointFiles?.has(resolveCwd(otherFile))).toBe(false)
     }
   })
 
@@ -127,7 +127,7 @@ describe('resolve', () => {
     writeFileSync(entryFile, 'export * as cmd from "./command"')
     writeFileSync(commandFile, 'export const run = () => {}')
 
-    const entrypointPaths = [absolute(entryFile)]
+    const entrypointPaths = [resolveCwd(entryFile)]
     const plugin = resolve(resolvedFilesMap, entrypointPaths)
 
     const startCallbacks: Array<() => void> = []
@@ -157,9 +157,9 @@ describe('resolve', () => {
       })
 
       expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(absolute(entryFile))
+      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
       // Should resolve to command.ts
-      expect(entrypointFiles?.has(absolute(commandFile))).toBe(true)
+      expect(entrypointFiles?.has(resolveCwd(commandFile))).toBe(true)
     }
   })
 
@@ -169,7 +169,7 @@ describe('resolve', () => {
     writeFileSync(entryFile, 'export { Component } from "./Component"')
     writeFileSync(componentFile, 'export const Component = () => <div />')
 
-    const entrypointPaths = [absolute(entryFile)]
+    const entrypointPaths = [resolveCwd(entryFile)]
     const plugin = resolve(resolvedFilesMap, entrypointPaths)
 
     const startCallbacks: Array<() => void> = []
@@ -198,9 +198,9 @@ describe('resolve', () => {
       })
 
       expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(absolute(entryFile))
+      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
       // Should resolve to Component.tsx
-      expect(entrypointFiles?.has(absolute(componentFile))).toBe(true)
+      expect(entrypointFiles?.has(resolveCwd(componentFile))).toBe(true)
     }
   })
 
@@ -214,7 +214,7 @@ describe('resolve', () => {
     writeFileSync(utils1File, 'export const foo = "foo"')
     writeFileSync(utils2File, 'export const bar = "bar"')
 
-    const entrypointPaths = [absolute(entryFile1), absolute(entryFile2)]
+    const entrypointPaths = [resolveCwd(entryFile1), resolveCwd(entryFile2)]
     const plugin = resolve(resolvedFilesMap, entrypointPaths)
 
     const startCallbacks: Array<() => void> = []
@@ -250,14 +250,14 @@ describe('resolve', () => {
       })
 
       // Check entry1's dependencies
-      const entry1Files = resolvedFilesMap.get(absolute(entryFile1))
-      expect(entry1Files?.has(absolute(utils1File))).toBe(true)
-      expect(entry1Files?.has(absolute(utils2File))).toBe(false)
+      const entry1Files = resolvedFilesMap.get(resolveCwd(entryFile1))
+      expect(entry1Files?.has(resolveCwd(utils1File))).toBe(true)
+      expect(entry1Files?.has(resolveCwd(utils2File))).toBe(false)
 
       // Check entry2's dependencies
-      const entry2Files = resolvedFilesMap.get(absolute(entryFile2))
-      expect(entry2Files?.has(absolute(utils2File))).toBe(true)
-      expect(entry2Files?.has(absolute(utils1File))).toBe(false)
+      const entry2Files = resolvedFilesMap.get(resolveCwd(entryFile2))
+      expect(entry2Files?.has(resolveCwd(utils2File))).toBe(true)
+      expect(entry2Files?.has(resolveCwd(utils1File))).toBe(false)
     }
   })
 })

@@ -3,7 +3,7 @@ import { normalize, resolve } from 'pathe'
 
 export const cwd = normalize(process.cwd())
 
-export function absolute(path: string): string {
+export function resolveCwd(path: string): string {
   return resolve(cwd, path)
 }
 

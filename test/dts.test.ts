@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { dts } from '../src/dts.ts'
-import { absolute } from '../src/utils.ts'
+import { resolveCwd } from '../src/utils.ts'
 
 /**
  * Helper to create a ResolvedFilesMap from entrypoint and its files.
@@ -35,7 +35,7 @@ describe('dts', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     const entrypointPaths = [entrypointPath]
     const plugin = dts(resolvedFilesMap, entrypointPaths)
@@ -79,10 +79,10 @@ describe('dts', () => {
     writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
     writeFileSync(utilsFile, 'export const foo = "bar"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
       entrypointPath,
-      absolute(utilsFile),
+      resolveCwd(utilsFile),
     ])
     const entrypointPaths = [entrypointPath]
 
@@ -107,7 +107,7 @@ describe('dts', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     const entrypointPaths = [entrypointPath]
 
@@ -129,7 +129,7 @@ describe('dts', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     const entrypointPaths = [entrypointPath]
     const plugin = dts(resolvedFilesMap, entrypointPaths)
@@ -157,11 +157,11 @@ describe('dts', () => {
     writeFileSync(utilsFile, 'export { bar } from "./helper.ts"\nexport const foo = "bar"')
     writeFileSync(helperFile, 'export const bar = "baz"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
       entrypointPath,
-      absolute(utilsFile),
-      absolute(helperFile),
+      resolveCwd(utilsFile),
+      resolveCwd(helperFile),
     ])
     const entrypointPaths = [entrypointPath]
 
@@ -187,7 +187,7 @@ describe('dts', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, '// empty file')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     const entrypointPaths = [entrypointPath]
 
@@ -211,10 +211,10 @@ describe('dts', () => {
     writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
     writeFileSync(utilsFile, 'import process from "node:process";\nimport fs from "node:fs";\nexport const foo = process.platform;')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
       entrypointPath,
-      absolute(utilsFile),
+      resolveCwd(utilsFile),
     ])
     const entrypointPaths = [entrypointPath]
 
@@ -242,10 +242,10 @@ describe('dts', () => {
     writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
     writeFileSync(utilsFile, 'export const foo = "bar"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
       entrypointPath,
-      absolute(utilsFile),
+      resolveCwd(utilsFile),
     ])
     const entrypointPaths = [entrypointPath]
 
@@ -272,10 +272,10 @@ describe('dts', () => {
     writeFileSync(entryFile, 'export * from "./utils.ts"')
     writeFileSync(utilsFile, 'export const foo = "bar"; export const bar = "baz";')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
       entrypointPath,
-      absolute(utilsFile),
+      resolveCwd(utilsFile),
     ])
     const entrypointPaths = [entrypointPath]
 
@@ -304,11 +304,11 @@ describe('dts', () => {
     writeFileSync(utilsFile, 'import { bar } from "./helper.ts"\nexport const foo = "bar"')
     writeFileSync(helperFile, 'export const bar = "baz"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
       entrypointPath,
-      absolute(utilsFile),
-      absolute(helperFile),
+      resolveCwd(utilsFile),
+      resolveCwd(helperFile),
     ])
     const entrypointPaths = [entrypointPath]
 
@@ -337,10 +337,10 @@ describe('dts', () => {
     writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
     writeFileSync(utilsFile, 'import type { Something } from "some-package"\nexport const foo = "bar"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
       entrypointPath,
-      absolute(utilsFile),
+      resolveCwd(utilsFile),
     ])
     const entrypointPaths = [entrypointPath]
 
@@ -363,9 +363,9 @@ describe('dts', () => {
     writeFileSync(entryFile, 'export * as cmd from "./command"')
     writeFileSync(commandFile, 'export const run = (): void => {}')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(commandFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(commandFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -393,9 +393,9 @@ describe('dts', () => {
     // Use a simple tsx file without JSX to avoid needing react runtime
     writeFileSync(componentFile, 'export const Component = "tsx-component"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(componentFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(componentFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -434,9 +434,9 @@ export interface CommandOptions {
 export { run }
 `)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(commandFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(commandFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -486,9 +486,9 @@ export interface Comment {
     writeFileSync(entryFile, `export type { User } from "./types"
 `)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -528,9 +528,9 @@ export default config
 export { config }
 `)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(configFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(configFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -556,9 +556,9 @@ export { config }
     writeFileSync(utilsFile, `export const internalName = "value"`)
     writeFileSync(entryFile, `export { internalName as publicName } from "./utils"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(utilsFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(utilsFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -590,9 +590,9 @@ export function unused(): void {}
 `)
     writeFileSync(entryFile, `export { greet } from "./func"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(funcFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(funcFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -632,9 +632,9 @@ export class UnusedClass {}
 `)
     writeFileSync(entryFile, `export { MyClass } from "./MyClass"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(classFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(classFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -671,9 +671,9 @@ export enum UnusedEnum {
 `)
     writeFileSync(entryFile, `export { Status } from "./enums"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(enumFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(enumFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -705,9 +705,9 @@ export type UnusedType = boolean
 `)
     writeFileSync(entryFile, `export type { ID } from "./types"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -743,9 +743,9 @@ export interface Extended extends Base {
     // Only export Extended, but Base should be included as it's referenced
     writeFileSync(entryFile, `export type { Extended } from "./types"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -786,9 +786,9 @@ export interface Unused {
     // Export Config which references User
     writeFileSync(entryFile, `export type { Config } from "./types"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -822,9 +822,9 @@ export type AsyncResult<T> = Promise<Result<T>>
 `)
     writeFileSync(entryFile, `export type { Result, AsyncResult } from "./types"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(typesFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -861,9 +861,9 @@ export type { Options } from "./module"
 export { DEFAULT_OPTIONS, configure } from "./module"
 `)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, absolute(moduleFile)]))
+    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(moduleFile)]))
     const entrypointPaths = [entrypointPath]
 
     await Bun.build({
@@ -899,13 +899,13 @@ export { DEFAULT_OPTIONS, configure } from "./module"
     // entry imports from a
     writeFileSync(entryFile, `export { deepValue } from "./a"`)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([
       entrypointPath,
-      absolute(aFile),
-      absolute(bFile),
-      absolute(cFile),
+      resolveCwd(aFile),
+      resolveCwd(bFile),
+      resolveCwd(cFile),
     ]))
     const entrypointPaths = [entrypointPath]
 
@@ -942,7 +942,7 @@ export class App {
 }
 `)
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
     resolvedFilesMap.set(entrypointPath, new Set([entrypointPath]))
     const entrypointPaths = [entrypointPath]
@@ -976,11 +976,11 @@ export class App {
     writeFileSync(utils1File, 'export const foo = "foo"')
     writeFileSync(utils2File, 'export const bar = "bar"')
 
-    const entry1Path = absolute(entry1File)
-    const entry2Path = absolute(entry2File)
+    const entry1Path = resolveCwd(entry1File)
+    const entry2Path = resolveCwd(entry2File)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entry1Path, new Set([entry1Path, absolute(utils1File)]))
-    resolvedFilesMap.set(entry2Path, new Set([entry2Path, absolute(utils2File)]))
+    resolvedFilesMap.set(entry1Path, new Set([entry1Path, resolveCwd(utils1File)]))
+    resolvedFilesMap.set(entry2Path, new Set([entry2Path, resolveCwd(utils2File)]))
     const entrypointPaths = [entry1Path, entry2Path]
 
     await Bun.build({

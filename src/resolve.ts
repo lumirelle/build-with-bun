@@ -11,16 +11,16 @@ import { cwd } from './utils.ts'
 /**
  * Resolve the dependent (relative) module paths of each entrypoint.
  *
- * @param root The root directory of the project.
  * @param entrypoints The entrypoints to resolve.
  * @param resolvedModuleMap The map to record the dependent (relative) module paths of each entrypoint.
  */
 export function resolve(
-  root: string | undefined,
   entrypoints: string[],
   resolvedModuleMap: ResolvedModuleMap,
   resolvedModules: Set<string>,
 ): BunPlugin {
+  const root = cwd
+
   /**
    * Map from a module path to its entrypoint. Used to trace back the entrypoint of a module.
    */

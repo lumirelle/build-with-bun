@@ -1,39 +1,36 @@
 import { describe, expect, it } from 'bun:test'
-import { resolve } from 'node:path'
 import process from 'node:process'
-import { absolute, cwd, formatDuration } from '../src/utils.ts'
+import { normalize, resolve } from 'pathe'
+import { cwd, formatDuration, resolveCwd } from '../src/utils.ts'
 
 describe('utils', () => {
   describe('cwd', () => {
     it('should be the current working directory', () => {
-      expect(cwd).toBe(process.cwd())
+      expect(cwd).toBe(normalize(process.cwd()))
     })
   })
 
-  describe('absolute', () => {
-    it('should resolve relative path to absolute', () => {
+  describe('resolveCwd', () => {
+    it('should resolve relative path based on current working directory', () => {
       const relativePath = 'src/index.ts'
-      const expected = resolve(process.cwd(), relativePath)
-      expect(absolute(relativePath)).toBe(expected)
+      expect(resolveCwd(relativePath)).toBe(resolve(process.cwd(), relativePath))
     })
 
-    it('should return same path for already absolute path', () => {
+    it('should return normalized same path for already absolute path', () => {
       const absolutePath = process.platform === 'win32'
         ? 'C:\\Users\\test\\file.ts'
         : '/home/test/file.ts'
-      expect(absolute(absolutePath)).toBe(absolutePath)
+      expect(resolveCwd(absolutePath)).toBe(normalize(absolutePath))
     })
 
     it('should handle path with dot notation', () => {
       const path = './src/index.ts'
-      const expected = resolve(process.cwd(), path)
-      expect(absolute(path)).toBe(expected)
+      expect(resolveCwd(path)).toBe(resolve(process.cwd(), path))
     })
 
     it('should handle path with parent directory notation', () => {
       const path = '../other/file.ts'
-      const expected = resolve(process.cwd(), path)
-      expect(absolute(path)).toBe(expected)
+      expect(resolveCwd(path)).toBe(resolve(process.cwd(), path))
     })
   })
 

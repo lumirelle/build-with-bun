@@ -1,5 +1,6 @@
+import { $ } from 'bun'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { build } from '../src/build.ts'
@@ -18,6 +19,114 @@ describe('build', () => {
     if (existsSync(testDir))
       rmSync(testDir, { recursive: true, force: true })
   })
+
+  it('should clean output directory when clean is true', async () => {
+    const entryFile = join(testDir, 'index.ts')
+    writeFileSync(entryFile, 'export const hello = "world"')
+
+    mkdirSync(testOutDir, { recursive: true })
+    const oldFile = join(testOutDir, 'old.js')
+    writeFileSync(oldFile, 'old content')
+
+    await build({
+      entrypoints: [entryFile],
+      outdir: testOutDir,
+      dts: false,
+      clean: true,
+    })
+
+    expect(existsSync(oldFile)).toBe(false)
+  })
+
+  it('should not clean output directory when clean is false', async () => {
+    const entryFile = join(testDir, 'index.ts')
+    writeFileSync(entryFile, 'export const hello = "world"')
+
+    mkdirSync(testOutDir, { recursive: true })
+    const oldFile = join(testOutDir, 'old.js')
+    writeFileSync(oldFile, 'old content')
+
+    await build({
+      entrypoints: [entryFile],
+      outdir: testOutDir,
+      dts: false,
+      clean: false,
+    })
+
+    expect(existsSync(oldFile)).toBe(true)
+  })
+
+  it('should found entrypoints based on cwd when they are relative paths', async () => {
+    const rootDir = join(testDir, 'src')
+    mkdirSync(rootDir, { recursive: true })
+    const entryFile = join(rootDir, 'index.ts')
+    writeFileSync(entryFile, 'export const hello = "world"')
+
+    expect(existsSync(entryFile)).toBe(true)
+    expect(readFileSync(entryFile).toString()).toBe('export const hello = "world"')
+
+    const result = await $`
+      bun -e "
+      import { build } from '${join(import.meta.dirname, '../src/build.ts')}';
+
+      console.log(await build({
+        entrypoints: ['./src/index.ts'],
+        dts: false,
+      }));
+      // Ensure to exit to end the process after build
+      process.exit(0);"
+    `.cwd(testDir).text()
+
+    expect(result).toContain('Build completed in')
+  })
+
+  it('should generate absolute entrypoints based on cwd correctly when they are relative paths', async () => {
+    const rootDir = join(testDir, 'src')
+    mkdirSync(rootDir, { recursive: true })
+    const entryFile = join(rootDir, 'index.ts')
+    writeFileSync(entryFile, 'export const hello = "world"')
+
+    const result = await $`
+      bun -e "
+      import { build } from '${join(import.meta.dirname, '../src/build.ts')}';
+
+      const output = await build({
+        entrypoints: ['./src/index.ts'],
+        outdir: './dist',
+        dts: false,
+        test: true,
+        silent: true,
+      });
+      console.log(output._absoluteEntrypoints);
+      // Ensure to exit to end the process after build
+      process.exit(0);"
+    `.cwd(testDir).text()
+
+    expect(result).toContain(entryFile)
+  })
+
+  it('should silently build when silent is true', async () => {
+    const entryFile = join(testDir, 'index.ts')
+    writeFileSync(entryFile, 'export const hello = "world"')
+
+    const result = await $`
+      bun -e "
+      import { build } from '${join(import.meta.dirname, '../src/build.ts')}';
+
+      const output = await build({
+        entrypoints: ['./index.ts'],
+        outdir: './dist',
+        dts: false,
+        silent: true,
+      });
+      // Ensure to exit to end the process after build
+      process.exit(0);"
+    `.cwd(testDir).text()
+
+    expect(result).toBe('')
+  })
+
+  // TODO(Lumirelle): Below tests should be refactored
 
   it('should build basic TypeScript file', async () => {
     const entryFile = join(testDir, 'index.ts')
@@ -85,42 +194,6 @@ describe('build', () => {
     })
 
     expect(callbackCalled).toBe(true)
-  })
-
-  it('should clean output directory when clean is true', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    mkdirSync(testOutDir, { recursive: true })
-    const oldFile = join(testOutDir, 'old.js')
-    writeFileSync(oldFile, 'old content')
-
-    await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-      clean: true,
-    })
-
-    expect(existsSync(oldFile)).toBe(false)
-  })
-
-  it('should not clean output directory when clean is false', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    mkdirSync(testOutDir, { recursive: true })
-    const oldFile = join(testOutDir, 'old.js')
-    writeFileSync(oldFile, 'old content')
-
-    await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-      clean: false,
-    })
-
-    expect(existsSync(oldFile)).toBe(true)
   })
 
   it('should use external sourcemap when watch is enabled', async () => {

@@ -3,7 +3,7 @@ import { parseSync } from 'oxc-parser'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import { basename, dirname, join, normalize, relative, resolve } from 'pathe'
 import { RE_TS } from './filename.ts'
-import { absolute, cwd } from './utils.ts'
+import { cwd, resolveCwd } from './utils.ts'
 
 interface DeclarationInfo {
   name: string
@@ -381,15 +381,15 @@ function inlineModuleDtsRecursive(
 /**
  * Generate `.d.ts` files for entrypoints (Using `oxc-transform` and `oxc-parser`).
  *
- * @param root The root directory of the project.
  * @param entrypoints The entrypoints to generate `.d.ts` files for.
  * @param resolvedModules The set of all resolved module paths.
  */
 export function dts(
-  root: string | undefined,
   entrypoints: string[],
   resolvedModules: Set<string>,
 ): BunPlugin {
+  const root = cwd
+
   /**
    * A map from module path to its isolated declaration.
    */
@@ -409,7 +409,7 @@ export function dts(
       if (!builder.config.outdir)
         return
 
-      const outPath = absolute(builder.config.outdir)
+      const outPath = resolveCwd(builder.config.outdir)
 
       builder.onStart(() => {
         dtsMap.clear()

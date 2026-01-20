@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { absolute } from '../src/utils.ts'
+import { resolveCwd } from '../src/utils.ts'
 import { watch } from '../src/watch.ts'
 
 /**
@@ -33,7 +33,7 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     const plugin = watch({}, resolvedFilesMap)
 
@@ -45,7 +45,7 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     let rebuildCalled = false
 
@@ -84,7 +84,7 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     let rebuildCalled = false
 
@@ -117,7 +117,7 @@ describe('watch', () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = absolute(entryFile)
+    const entrypointPath = resolveCwd(entryFile)
     const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
     const plugin = watch({
       debounce: 100,
@@ -136,11 +136,11 @@ describe('watch', () => {
     writeFileSync(utils1File, 'export const foo = "foo"')
     writeFileSync(utils2File, 'export const bar = "bar"')
 
-    const entry1Path = absolute(entry1File)
-    const entry2Path = absolute(entry2File)
+    const entry1Path = resolveCwd(entry1File)
+    const entry2Path = resolveCwd(entry2File)
     const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entry1Path, new Set([entry1Path, absolute(utils1File)]))
-    resolvedFilesMap.set(entry2Path, new Set([entry2Path, absolute(utils2File)]))
+    resolvedFilesMap.set(entry1Path, new Set([entry1Path, resolveCwd(utils1File)]))
+    resolvedFilesMap.set(entry2Path, new Set([entry2Path, resolveCwd(utils2File)]))
 
     const plugin = watch({}, resolvedFilesMap)
 
