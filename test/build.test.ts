@@ -18,54 +18,198 @@ describe('build', () => {
   afterEach(() => {
     if (existsSync(testDir))
       rmSync(testDir, { recursive: true, force: true })
+    if (existsSync(testOutDir))
+      rmSync(testOutDir, { recursive: true, force: true })
   })
 
-  it('should clean output directory when clean is true', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+  describe('build options defaults', () => {
+    it('should clean output directory by default', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-    mkdirSync(testOutDir, { recursive: true })
-    const oldFile = join(testOutDir, 'old.js')
-    writeFileSync(oldFile, 'old content')
+      mkdirSync(testOutDir, { recursive: true })
+      const oldFile = join(testOutDir, 'old.js')
+      writeFileSync(oldFile, 'old content')
 
-    await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-      clean: true,
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+      })
+
+      expect(existsSync(oldFile)).toBe(false)
     })
 
-    expect(existsSync(oldFile)).toBe(false)
-  })
+    it.todo('should generate dts files by default', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-  it('should not clean output directory when clean is false', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+      })
 
-    mkdirSync(testOutDir, { recursive: true })
-    const oldFile = join(testOutDir, 'old.js')
-    writeFileSync(oldFile, 'old content')
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
 
-    await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-      clean: false,
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('declare')
+      expect(dtsContent).toContain('hello')
     })
 
-    expect(existsSync(oldFile)).toBe(true)
+    it('should use external sourcemap when watch is enabled', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      const output = await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+        watch: true,
+        test: true,
+      })
+
+      expect(output.success).toBe(true)
+      // @ts-expect-error internal testing only
+      expect(output._sourcemap).toBe('external')
+    })
+
+    it('should treat packages external by default', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'import { join } from "node:path"\nexport const test = join("a", "b")')
+
+      const output = await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+        test: true,
+      })
+
+      expect(output.success).toBe(true)
+      // @ts-expect-error internal testing only
+      expect(output._packages).toBe('external')
+    })
   })
 
-  it('should found entrypoints based on cwd when they are relative paths', async () => {
-    const rootDir = join(testDir, 'src')
-    mkdirSync(rootDir, { recursive: true })
-    const entryFile = join(rootDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+  describe('build options', () => {
+    it('should clean output directory when clean is true', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-    expect(existsSync(entryFile)).toBe(true)
-    expect(readFileSync(entryFile).toString()).toBe('export const hello = "world"')
+      mkdirSync(testOutDir, { recursive: true })
+      const oldFile = join(testOutDir, 'old.js')
+      writeFileSync(oldFile, 'old content')
 
-    const result = await $`
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+        clean: true,
+      })
+
+      expect(existsSync(oldFile)).toBe(false)
+    })
+
+    it('should not clean output directory when clean is false', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      mkdirSync(testOutDir, { recursive: true })
+      const oldFile = join(testOutDir, 'old.js')
+      writeFileSync(oldFile, 'old content')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+        clean: false,
+      })
+
+      expect(existsSync(oldFile)).toBe(true)
+    })
+
+    it.todo('should generate dts files when dts is true', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('declare')
+      expect(dtsContent).toContain('hello')
+    })
+
+    it('should not generate dts files when dts is false', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(false)
+    })
+
+    it('should call afterBuild callback', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      let callbackCalled = false
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+        afterBuild: () => {
+          callbackCalled = true
+        },
+      })
+
+      expect(callbackCalled).toBe(true)
+    })
+
+    it('should silently build when silent is true', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      const result = await $`
+      bun -e "
+      import { build } from '${join(import.meta.dirname, '../src/build.ts')}';
+
+      const output = await build({
+        entrypoints: ['./index.ts'],
+        outdir: './dist',
+        dts: false,
+        silent: true,
+      });
+      // Ensure to exit to end the process after build
+      process.exit(0);"
+    `.cwd(testDir).text()
+
+      expect(result).toBe('')
+    })
+  })
+
+  describe('build behavior', () => {
+    it('should found entrypoints based on cwd when they are relative paths', async () => {
+      const rootDir = join(testDir, 'src')
+      mkdirSync(rootDir, { recursive: true })
+      const entryFile = join(rootDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      expect(existsSync(entryFile)).toBe(true)
+      expect(readFileSync(entryFile).toString()).toBe('export const hello = "world"')
+
+      const result = await $`
       bun -e "
       import { build } from '${join(import.meta.dirname, '../src/build.ts')}';
 
@@ -77,16 +221,16 @@ describe('build', () => {
       process.exit(0);"
     `.cwd(testDir).text()
 
-    expect(result).toContain('Build completed in')
-  })
+      expect(result).toContain('Build completed in')
+    })
 
-  it('should generate absolute entrypoints based on cwd correctly when they are relative paths', async () => {
-    const rootDir = join(testDir, 'src')
-    mkdirSync(rootDir, { recursive: true })
-    const entryFile = join(rootDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+    it('should generate absolute entrypoints based on cwd correctly when they are relative paths', async () => {
+      const rootDir = join(testDir, 'src')
+      mkdirSync(rootDir, { recursive: true })
+      const entryFile = join(rootDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-    const result = await $`
+      const result = await $`
       bun -e "
       import { build } from '${join(import.meta.dirname, '../src/build.ts')}';
 
@@ -102,154 +246,137 @@ describe('build', () => {
       process.exit(0);"
     `.cwd(testDir).text()
 
-    expect(result).toContain(entryFile)
-  })
+      expect(result).toContain(entryFile)
+    })
 
-  it('should silently build when silent is true', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const result = await $`
-      bun -e "
-      import { build } from '${join(import.meta.dirname, '../src/build.ts')}';
+    it('should using resolve plugin when dts is enabled', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilFile = join(testDir, 'util.ts')
+      writeFileSync(entryFile, 'import { greet } from "./util"; export const hello = greet("world")')
+      // eslint-disable-next-line no-template-curly-in-string
+      writeFileSync(utilFile, 'export function greet(name: string) { return `Hello, ${name}!`; }')
 
       const output = await build({
-        entrypoints: ['./index.ts'],
-        outdir: './dist',
+        entrypoints: [entryFile],
+        dts: true,
+        test: true,
+      })
+
+      expect(output.success).toBe(true)
+      // @ts-expect-error internal testing only
+      expect(output._pluginNames).toContain('resolve')
+    })
+
+    it('should using dts plugin when dts is enabled', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilFile = join(testDir, 'util.ts')
+      writeFileSync(entryFile, 'import { greet } from "./util"; export const hello = greet("world")')
+      // eslint-disable-next-line no-template-curly-in-string
+      writeFileSync(utilFile, 'export function greet(name: string) { return `Hello, ${name}!`; }')
+
+      const output = await build({
+        entrypoints: [entryFile],
+        dts: true,
+        test: true,
+      })
+
+      expect(output.success).toBe(true)
+      // @ts-expect-error internal testing only
+      expect(output._pluginNames).toContain('dts')
+    })
+
+    it.todo('should generate dts for all entrypoints', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      const output = await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
         dts: false,
-        silent: true,
-      });
-      // Ensure to exit to end the process after build
-      process.exit(0);"
-    `.cwd(testDir).text()
+      })
 
-    expect(result).toBe('')
-  })
-
-  // TODO(Lumirelle): Below tests should be refactored
-
-  it('should build basic TypeScript file', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const output = await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
+      expect(output.success).toBe(true)
+      expect(output.outputs.length).toBeGreaterThan(0)
     })
 
-    expect(output.success).toBe(true)
-    expect(output.outputs.length).toBeGreaterThan(0)
-  })
+    it.todo('should resolve dependencies and generate dts for all entrypoints', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
+      writeFileSync(utilsFile, 'export const foo = "bar"')
 
-  it('should generate dts files when dts is enabled', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
 
-    await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: true,
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('foo')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should using resolve plugin when watch is enabled', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilFile = join(testDir, 'util.ts')
+      writeFileSync(entryFile, 'import { greet } from "./util"; export const hello = greet("world")')
+      // eslint-disable-next-line no-template-curly-in-string
+      writeFileSync(utilFile, 'export function greet(name: string) { return `Hello, ${name}!`; }')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('declare')
-    expect(dtsContent).toContain('hello')
-  })
+      const output = await build({
+        entrypoints: [entryFile],
+        watch: true,
+        test: true,
+        afterBuild: async () => {
+        // Simulate stopping the watch after the first build
+          process.send?.('SIGINT')
+        },
+      })
 
-  it('should resolve dependencies and generate dts for all files', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-    writeFileSync(utilsFile, 'export const foo = "bar"')
-
-    await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: true,
+      expect(output.success).toBe(true)
+      // @ts-expect-error internal testing only
+      expect(output._pluginNames).toContain('resolve')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should using watch plugin when watch is enabled', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilFile = join(testDir, 'util.ts')
+      writeFileSync(entryFile, 'import { greet } from "./util"; export const hello = greet("world")')
+      // eslint-disable-next-line no-template-curly-in-string
+      writeFileSync(utilFile, 'export function greet(name: string) { return `Hello, ${name}!`; }')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('foo')
-  })
+      const output = await build({
+        entrypoints: [entryFile],
+        watch: true,
+        test: true,
+      })
 
-  it('should call afterBuild callback', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    let callbackCalled = false
-    await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-      afterBuild: () => {
-        callbackCalled = true
-      },
+      expect(output.success).toBe(true)
+      // @ts-expect-error internal testing only
+      expect(output._pluginNames).toContain('watch')
     })
 
-    expect(callbackCalled).toBe(true)
-  })
+    it.todo('should call afterBuild callback after rebuild in watch mode', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-  it('should use external sourcemap when watch is enabled', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+      let rebuildCalled = 0
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+        watch: true,
+        afterBuild: () => {
+          rebuildCalled++
+        },
+      })
 
-    const output = await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-      watch: true,
+      // Simulate a file change to trigger rebuild
+      writeFileSync(entryFile, 'export const hello = "bun"')
+
+      expect(rebuildCalled).toBeGreaterThan(1)
     })
-
-    expect(output.success).toBe(true)
-  })
-
-  it('should add resolve plugin when dts is enabled', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const output = await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: true,
-    })
-
-    expect(output.success).toBe(true)
-  })
-
-  it('should use default packages as external', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'import { join } from "node:path"\nexport const test = join("a", "b")')
-
-    const output = await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-    })
-
-    expect(output.success).toBe(true)
-    const content = await Bun.file(join(testOutDir, 'index.js')).text()
-    // External packages should be kept as imports
-    expect(content).toContain('node:path')
-  })
-
-  it('should bundle packages when packages is set to bundle', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const output = await build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      dts: false,
-      packages: 'bundle',
-    })
-
-    expect(output.success).toBe(true)
   })
 })

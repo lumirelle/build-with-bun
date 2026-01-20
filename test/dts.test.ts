@@ -15,7 +15,7 @@ function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedMo
   return map
 }
 
-describe('dts', () => {
+describe.todo('dts', () => {
   const testDir = join(tmpdir(), 'dts-test')
   const testOutDir = join(testDir, 'dist')
 

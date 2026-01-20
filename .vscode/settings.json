@@ -7,7 +7,7 @@
 
   // LSP
   // Try out ts-go for better performance
-  "typescript.experimental.useTsgo": true,
+  "typescript.experimental.useTsgo": false,
 
   // Formatter & Linter
   "editor.formatOnSave": false,

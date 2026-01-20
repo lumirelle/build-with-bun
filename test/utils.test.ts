@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import process from 'node:process'
-import { normalize, resolve } from 'pathe'
-import { cwd, formatDuration, resolveCwd } from '../src/utils.ts'
+import { join, normalize, resolve } from 'pathe'
+import { cwd, formatDuration, resolveCwd, tryResolveTs } from '../src/utils.ts'
 
 describe('utils', () => {
   describe('cwd', () => {
@@ -58,6 +60,98 @@ describe('utils', () => {
     it('should handle boundary value at 1000ms', () => {
       expect(formatDuration(999.99)).toBe('999.99ms')
       expect(formatDuration(1000)).toBe('1.00s')
+    })
+  })
+  describe('tryResolveTs', () => {
+    const testDir = join(tmpdir(), 'filename-test')
+
+    beforeEach(() => {
+      if (existsSync(testDir))
+        rmSync(testDir, { recursive: true, force: true })
+      mkdirSync(testDir, { recursive: true })
+    })
+
+    afterEach(() => {
+      if (existsSync(testDir))
+        rmSync(testDir, { recursive: true, force: true })
+    })
+
+    it('should resolve existing .ts file with extension', () => {
+      const filePath = join(testDir, 'file.ts')
+      writeFileSync(filePath, 'export const foo = 1')
+
+      expect(tryResolveTs(filePath)).toBe(filePath)
+    })
+
+    it('should resolve existing .tsx file with extension', () => {
+      const filePath = join(testDir, 'Component.tsx')
+      writeFileSync(filePath, 'export const Component = "test"')
+
+      expect(tryResolveTs(filePath)).toBe(filePath)
+    })
+
+    it('should return null for non-existing file with extension', () => {
+      const filePath = join(testDir, 'nonexistent.ts')
+
+      expect(tryResolveTs(filePath)).toBeNull()
+    })
+
+    it('should resolve .ts file without extension', () => {
+      const filePath = join(testDir, 'file.ts')
+      writeFileSync(filePath, 'export const foo = 1')
+
+      const basePath = join(testDir, 'file')
+      expect(tryResolveTs(basePath)).toBe(filePath)
+    })
+
+    it('should resolve .tsx file without extension', () => {
+      const filePath = join(testDir, 'Component.tsx')
+      writeFileSync(filePath, 'export const Component = "test"')
+
+      const basePath = join(testDir, 'Component')
+      expect(tryResolveTs(basePath)).toBe(filePath)
+    })
+
+    it('should resolve .mts file without extension', () => {
+      const filePath = join(testDir, 'module.mts')
+      writeFileSync(filePath, 'export const mod = 1')
+
+      const basePath = join(testDir, 'module')
+      expect(tryResolveTs(basePath)).toBe(filePath)
+    })
+
+    it('should resolve index.ts in directory', () => {
+      const subDir = join(testDir, 'subdir')
+      mkdirSync(subDir, { recursive: true })
+      const indexPath = join(subDir, 'index.ts')
+      writeFileSync(indexPath, 'export const index = 1')
+
+      expect(tryResolveTs(subDir)).toBe(indexPath)
+    })
+
+    it('should resolve index.tsx in directory', () => {
+      const subDir = join(testDir, 'components')
+      mkdirSync(subDir, { recursive: true })
+      const indexPath = join(subDir, 'index.tsx')
+      writeFileSync(indexPath, 'export const Index = "component"')
+
+      expect(tryResolveTs(subDir)).toBe(indexPath)
+    })
+
+    it('should return null for non-existing path without extension', () => {
+      const basePath = join(testDir, 'nonexistent')
+
+      expect(tryResolveTs(basePath)).toBeNull()
+    })
+
+    it('should prefer .ts over .tsx when both exist', () => {
+      const tsPath = join(testDir, 'file.ts')
+      const tsxPath = join(testDir, 'file.tsx')
+      writeFileSync(tsPath, 'export const ts = 1')
+      writeFileSync(tsxPath, 'export const tsx = 1')
+
+      const basePath = join(testDir, 'file')
+      expect(tryResolveTs(basePath)).toBe(tsPath)
     })
   })
 })

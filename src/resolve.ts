@@ -5,8 +5,8 @@
 import type { BunPlugin } from 'bun'
 import type { ResolvedModuleMap } from './types.ts'
 import { dirname, isAbsolute, resolve as pathResolve } from 'pathe'
-import { RE_RELATIVE, tryResolveTs } from './filename.ts'
-import { cwd } from './utils.ts'
+import { RE_RELATIVE } from './constants.ts'
+import { cwd, tryResolveTs } from './utils.ts'
 
 /**
  * Resolve the dependent (relative) module paths of each entrypoint.

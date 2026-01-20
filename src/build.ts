@@ -122,7 +122,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   /**
    * Absolute entrypoint paths.
    */
-  const absoluteEntrypoints = config.entrypoints.map(entry => resolveCwd(entry))
+  const absoluteEntrypoints = entrypoints.map(entry => resolveCwd(entry))
   /**
    * Map from entrypoint path to its dependent (relative) module paths. Resolved based on the root directory.
    */
@@ -150,6 +150,9 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   const bunConfig = {
     entrypoints,
     outdir,
+    // We create `bunConfig` with plugins now, and add more plugins later
+    // It's a reference type, so we can do this safely, all changes will take effect to `bunConfig`
+    // The same to `entrypoints` and `rest`
     plugins,
     sourcemap,
     packages,
@@ -159,6 +162,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   if (watch) {
     plugins.push(
       (await import('./watch.ts')).watch({
+        test,
         onRebuild: async () => {
           const rebuildStartTime = performance.now()
           if (!silent)
@@ -186,9 +190,13 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
   if (test) {
     // @ts-expect-error internal testing only
-    output._absoluteEntrypoints = absoluteEntrypoints
+    output._sourcemap = sourcemap
     // @ts-expect-error internal testing only
-    output._resolvedEntrypoints = absoluteEntrypoints
+    output._packages = packages
+    // @ts-expect-error internal testing only
+    output._absoluteEntrypoints = [...absoluteEntrypoints]
+    // @ts-expect-error internal testing only
+    output._pluginNames = plugins.map(plugin => plugin.name)
   }
   return output
 }

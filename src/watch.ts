@@ -5,6 +5,7 @@ import fs from 'node:fs'
 export interface WatchOptions {
   onRebuild?: () => Promise<void> | void
   debounce?: number
+  test?: boolean
 }
 
 /**
@@ -23,7 +24,7 @@ export function watch(
   options: WatchOptions = {},
   resolvedDepFilesMap: ResolvedModuleMap,
 ): BunPlugin {
-  const { onRebuild, debounce = 50 } = options
+  const { onRebuild, debounce = 50, test } = options
   let rebuildFn: (() => Promise<void>) | null = null
   let debounceTimer: Timer | null = null
   let pending = false
@@ -33,6 +34,8 @@ export function watch(
     name: 'watch',
     setup(builder) {
       builder.onEnd(async (result) => {
+        if (test)
+          return
         if (!result.success)
           return
 

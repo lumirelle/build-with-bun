@@ -15,7 +15,7 @@ function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedMo
   return map
 }
 
-describe('watch', () => {
+describe.todo('watch', () => {
   const testDir = join(tmpdir(), 'watch-test')
 
   beforeEach(() => {

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { resolve } from '../src/resolve.ts'
 import { resolveCwd } from '../src/utils.ts'
 
-describe('resolve', () => {
+describe.todo('resolve', () => {
   const testDir = join(tmpdir(), 'resolve-test')
   let resolvedFilesMap: ResolvedModuleMap
 

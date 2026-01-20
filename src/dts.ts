@@ -2,7 +2,7 @@ import type { BunPlugin } from 'bun'
 import { parseSync } from 'oxc-parser'
 import { isolatedDeclarationSync } from 'oxc-transform'
 import { basename, dirname, join, normalize, relative, resolve } from 'pathe'
-import { RE_TS } from './filename.ts'
+import { RE_TS } from './constants.ts'
 import { cwd, resolveCwd } from './utils.ts'
 
 interface DeclarationInfo {
