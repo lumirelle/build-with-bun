@@ -1,9 +1,9 @@
 import type { BunPlugin } from 'bun'
 import { parseSync } from 'oxc-parser'
 import { isolatedDeclarationSync } from 'oxc-transform'
-import { basename, dirname, join, normalize, relative, resolve } from 'pathe'
+import { dirname, join, normalize, relative, resolve } from 'pathe'
 import { RE_TS } from './constants.ts'
-import { cwd, resolveCwd } from './utils.ts'
+import { cwd, extractCommonAncestor, resolveCwd } from './utils.ts'
 
 interface DeclarationInfo {
   name: string
@@ -381,14 +381,17 @@ function inlineModuleDtsRecursive(
 /**
  * Generate `.d.ts` files for entrypoints (Using `oxc-transform` and `oxc-parser`).
  *
+ * @param root The project root directory.
  * @param entrypoints The entrypoints to generate `.d.ts` files for.
  * @param resolvedModules The set of all resolved module paths.
  */
 export function dts(
+  root: string | undefined,
   entrypoints: string[],
   resolvedModules: Set<string>,
 ): BunPlugin {
-  const root = cwd
+  if (!root)
+    root = extractCommonAncestor(entrypoints)
 
   /**
    * A map from module path to its isolated declaration.
@@ -448,7 +451,7 @@ export function dts(
           const outFile = entrypoint.replace(RE_TS, '.d.ts')
           const outFilePath = join(
             outPath,
-            root ? relative(root, outFile) : basename(outFile),
+            relative(root, outFile),
           )
           await Bun.write(outFilePath, dts.trim())
         }

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import process from 'node:process'
-import { join, normalize, resolve } from 'pathe'
-import { cwd, formatDuration, resolveCwd, tryResolveTs } from '../src/utils.ts'
+import { dirname, join, normalize, resolve } from 'pathe'
+import { cwd, extractCommonAncestor, formatDuration, resolveCwd, tryResolveTs } from '../src/utils.ts'
 
 describe('utils', () => {
   describe('cwd', () => {
@@ -62,6 +62,7 @@ describe('utils', () => {
       expect(formatDuration(1000)).toBe('1.00s')
     })
   })
+
   describe('tryResolveTs', () => {
     const testDir = join(tmpdir(), 'filename-test')
 
@@ -204,6 +205,132 @@ describe('utils', () => {
       writeFileSync(indexPath, 'export const indexMod = 1')
 
       expect(tryResolveTs(join(testDir, 'module'))).toBe(filePath)
+    })
+  })
+
+  describe('extractCommonAncestor', () => {
+    it('should return "." for empty path list', () => {
+      expect(extractCommonAncestor([])).toBe('.')
+    })
+
+    it('should return the directory of the single path', () => {
+      const path = process.platform === 'win32'
+        ? 'C:\\Users\\user\\project\\src\\index.ts'
+        : '/home/user/project/src/index.ts'
+      expect(extractCommonAncestor([path])).toBe(dirname(path))
+    })
+
+    it('should return absolute common ancestor for multiple paths not based on cwd', () => {
+      const paths = process.platform === 'win32'
+        ? [
+            'C:\\Users\\user\\project\\src\\index.ts',
+            'C:\\Users\\user\\project\\src\\utils\\helpers.ts',
+            'C:\\Users\\user\\project\\src\\components\\Button.tsx',
+          ]
+        : [
+            '/home/user/project/src/index.ts',
+            '/home/user/project/src/utils/helpers.ts',
+            '/home/user/project/src/components/Button.tsx',
+          ]
+      expect(extractCommonAncestor(paths)).toBe(process.platform === 'win32' ? 'C:/Users/user/project/src' : '/home/user/project/src')
+    })
+
+    it('should return absolute common ancestor for multiple paths based on cwd', () => {
+      const paths = [
+        `${cwd}/project/src/index.ts`,
+        `${cwd}/project/src/utils/helpers.ts`,
+        `${cwd}/project/src/components/Button.tsx`,
+      ]
+      expect(extractCommonAncestor(paths)).toBe('project/src')
+    })
+
+    it('should return relative common ancestor for multiple relative paths', () => {
+      const paths = [
+        'project/src/index.ts',
+        'project/src/utils/helpers.ts',
+        'project/src/components/Button.tsx',
+      ]
+      expect(extractCommonAncestor(paths)).toBe('project/src')
+    })
+
+    it('should return system root path when there is no common ancestor for multiple absolute paths', () => {
+      const paths = process.platform === 'win32'
+        ? [
+            'C:\\Users\\user\\project\\src\\index.ts',
+            'C:\\Windows\\System32\\drivers\\etc\\hosts',
+            'C:\\Program Files\\App\\config.ini',
+          ]
+        : [
+            '/home/user/project/src/index.ts',
+            '/var/log/system.log',
+            '/etc/config/settings.conf',
+          ]
+      expect(extractCommonAncestor(paths)).toBe(process.platform === 'win32' ? 'C:/' : '/')
+    })
+
+    it('should return "." when there is no common ancestor for multiple relative paths', () => {
+      const paths = [
+        'project/src/index.ts',
+        'var/log/system.log',
+        'etc/config/settings.conf',
+      ]
+      expect(extractCommonAncestor(paths)).toBe('.')
+    })
+
+    it('should handle absolute paths not based on cwd with different depths', () => {
+      const paths = process.platform === 'win32'
+        ? [
+            'C:\\Users\\user\\project\\src\\index.ts',
+            'C:\\Users\\user\\project\\src\\utils\\helpers.ts',
+            'C:\\Users\\user\\project\\README.md',
+          ]
+        : [
+            '/home/user/project/src/index.ts',
+            '/home/user/project/src/utils/helpers.ts',
+            '/home/user/project/README.md',
+          ]
+      expect(extractCommonAncestor(paths)).toBe(process.platform === 'win32' ? 'C:/Users/user/project' : '/home/user/project')
+    })
+
+    it('should handle absolute paths based on cwd with different depths', () => {
+      const paths = [
+        `${cwd}/project/src/index.ts`,
+        `${cwd}/project/src/utils/helpers.ts`,
+        `${cwd}/project/README.md`,
+      ]
+      expect(extractCommonAncestor(paths)).toBe('project')
+    })
+
+    it('should handle relative paths with different depths', () => {
+      const paths = [
+        'project/src/index.ts',
+        'project/src/utils/helpers.ts',
+        'project/src/components/Button.tsx',
+      ]
+      expect(extractCommonAncestor(paths)).toBe('project/src')
+    })
+
+    it('should handle mixed absolute (based on cwd) and relative paths and return relative path', async () => {
+      const paths = [
+        `${cwd}/project/src/index.ts`,
+        'project/src/utils/helpers.ts',
+      ]
+      expect(extractCommonAncestor(paths)).toBe('project/src')
+    })
+
+    it('should handle mixed absolute (not based on cwd) and relative paths and return absolute path', async () => {
+      const paths = process.platform === 'win32'
+        ? [
+            'C:\\Users\\user\\project\\src\\index.ts',
+            'new-projects\\src\\utils\\helpers.ts',
+          ]
+        : [
+            '/home/auser/project/src/index.ts',
+            'new-projects/src/utils/helpers.ts',
+          ]
+      expect(extractCommonAncestor(paths)).toBe(
+        process.platform === 'win32' ? 'C:/Users' : '/home/auser',
+      )
     })
   })
 })

@@ -101,6 +101,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
   const {
     entrypoints,
+    root,
     outdir,
     // Below is additional options
     clean = true,
@@ -142,6 +143,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
   if (dts) {
     plugins.push((await import('./dts.ts')).dts(
+      root,
       absoluteEntrypoints,
       resolvedModules,
     ))
@@ -149,6 +151,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
   const bunConfig = {
     entrypoints,
+    root,
     outdir,
     // We create `bunConfig` with plugins now, and add more plugins later
     // It's a reference type, so we can do this safely, all changes will take effect to `bunConfig`

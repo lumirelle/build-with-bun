@@ -3,19 +3,20 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { build } from '../src/build.ts'
 import { dts } from '../src/dts.ts'
 import { resolveCwd } from '../src/utils.ts'
 
 /**
  * Helper to create a ResolvedFilesMap from entrypoint and its files.
  */
-function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedModuleMap {
-  const map: ResolvedModuleMap = new Map()
-  map.set(entrypoint, new Set(files))
-  return map
+function createResolvedModules(files: string[]): Set<string> {
+  const set: Set<string> = new Set()
+  set.union(new Set(files))
+  return set
 }
 
-describe.todo('dts', () => {
+describe('dts', () => {
   const testDir = join(tmpdir(), 'dts-test')
   const testOutDir = join(testDir, 'dist')
 
@@ -31,395 +32,417 @@ describe.todo('dts', () => {
       rmSync(testDir, { recursive: true, force: true })
   })
 
-  it('should generate dts file for entrypoint', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+  describe('dts file generation', () => {
+    it('should generate dts file for entrypoint if outdir is provided', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    const entrypointPaths = [entrypointPath]
-    const plugin = dts(resolvedFilesMap, entrypointPaths)
+      const resolvedEntry = resolveCwd(entryFile)
+      const entrypointPaths = [resolvedEntry]
+      const resolvedModules = createResolvedModules(entrypointPaths)
 
-    const builder = {
-      config: {
+      await build({
         entrypoints: [entryFile],
         outdir: testOutDir,
-      },
-      onStart: (callback: () => void) => {
-        callback()
-      },
-      onLoad: (options: any, callback: (args: any) => any) => {
-        if (options.filter.test(entryFile)) {
-          callback({ path: entryFile })
-        }
-      },
-      onEnd: async (callback: () => Promise<void>) => {
-        await callback()
-      },
-    } as any
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-    plugin.setup(builder)
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [plugin],
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const hello = "world";')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should not generate dts when outdir is not provided', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('export declare const hello = "world";')
-  })
+      const resolvedEntry = resolveCwd(entryFile)
+      const entrypointPaths = [resolvedEntry]
+      const resolvedModules = createResolvedModules(entrypointPaths)
 
-  it('should merge dependencies into dts file', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-    writeFileSync(utilsFile, 'export const foo = "bar"')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
-      entrypointPath,
-      resolveCwd(utilsFile),
-    ])
-    const entrypointPaths = [entrypointPath]
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
-    })
-
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
-
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('export declare const foo = "bar";')
-    expect(dtsContent).toContain('export { foo };')
-  })
-
-  it('should include source path comments in dts', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    const entrypointPaths = [entrypointPath]
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
-    })
-
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toMatch(/^\/\/ .+index\.ts/)
-  })
-
-  it('should not generate dts when outdir is not set', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    const entrypointPaths = [entrypointPath]
-    const plugin = dts(resolvedFilesMap, entrypointPaths)
-
-    const builder = {
-      config: {
+      await build({
         entrypoints: [entryFile],
-        outdir: undefined,
-      },
-      onStart: () => {},
-      onLoad: () => {},
-      onEnd: async () => {},
-    } as any
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-    plugin.setup(builder)
-
-    expect(builder.onStart).toBeDefined()
-  })
-
-  it('should handle nested dependencies with imports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    const helperFile = join(testDir, 'helper.ts')
-    writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-    writeFileSync(utilsFile, 'export { bar } from "./helper.ts"\nexport const foo = "bar"')
-    writeFileSync(helperFile, 'export const bar = "baz"')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
-      entrypointPath,
-      resolveCwd(utilsFile),
-      resolveCwd(helperFile),
-    ])
-    const entrypointPaths = [entrypointPath]
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsFile = join(testDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(false)
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should generate dts file and output base on automatically detected root', async () => {
+    // root will be automatically set to testDir/src
+      const srcDir = join(testDir, 'src')
+      mkdirSync(srcDir, { recursive: true })
+      const entryFile = join(srcDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('export declare const foo = "bar";')
-    expect(dtsContent).not.toContain('export declare const bar = "baz";')
-    expect(dtsContent).toContain('export { foo };')
-  })
+      const resolvedEntry = resolveCwd(entryFile)
+      const entrypointPaths = [resolvedEntry]
+      const resolvedModules = createResolvedModules(entrypointPaths)
 
-  it('should handle entrypoint with empty dts content', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, '// empty file')
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    const entrypointPaths = [entrypointPath]
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const hello = "world";')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toBe('')
+    it('should generate dts file and output base on specified root', async () => {
+    // root will be automatically set to testDir/src
+      const srcDir = join(testDir, 'src')
+      mkdirSync(srcDir, { recursive: true })
+      const entryFile = join(srcDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      const resolvedEntry = resolveCwd(entryFile)
+      const entrypointPaths = [resolvedEntry]
+      const resolvedModules = createResolvedModules(entrypointPaths)
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        root: testDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'src', 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const hello = "world";')
+    })
   })
 
-  it('should handle dependencies with non-relative imports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-    writeFileSync(utilsFile, 'import process from "node:process";\nimport fs from "node:fs";\nexport const foo = process.platform;')
+  describe('dts content generation', () => {
+    it('should handle entrypoint with empty dts content', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, '// empty file')
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
-      entrypointPath,
-      resolveCwd(utilsFile),
-    ])
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedModules = createResolvedModules([entrypointPath])
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
-      target: 'node',
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toBe('')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('import process from "node:process";')
-    expect(dtsContent).toContain('export declare const foo = process.platform;')
-    expect(dtsContent).toContain('export { foo };')
-    expect(dtsContent).not.toContain('import fs from "node:fs";')
-  })
+    it('should merge exported dependencies into dts file', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
+      writeFileSync(utilsFile, 'export const foo = "bar"')
 
-  it('should handle dependencies with relative imports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-    writeFileSync(utilsFile, 'export const foo = "bar"')
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedModules = createResolvedModules([
+        entrypointPath,
+        resolveCwd(utilsFile),
+      ])
+      const entrypointPaths = [entrypointPath]
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
-      entrypointPath,
-      resolveCwd(utilsFile),
-    ])
-    const entrypointPaths = [entrypointPath]
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const foo = "bar";')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should merge exported dependencies without file extension into dts file', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils"')
+      writeFileSync(utilsFile, 'export const foo = "bar"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('export declare const foo = "bar";')
-    expect(dtsContent).toContain('export { foo };')
-  })
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedModules = createResolvedModules([
+        entrypointPath,
+        resolveCwd(utilsFile),
+      ])
+      const entrypointPaths = [entrypointPath]
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-  it('should handle entrypoint with only dependencies', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    writeFileSync(entryFile, 'export * from "./utils.ts"')
-    writeFileSync(utilsFile, 'export const foo = "bar"; export const bar = "baz";')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
-      entrypointPath,
-      resolveCwd(utilsFile),
-    ])
-    const entrypointPaths = [entrypointPath]
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const foo = "bar";')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should include source path comments in dts if merged exported dependencies', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
+      writeFileSync(utilsFile, 'export const foo = "bar"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('export declare const foo = "bar";')
-    expect(dtsContent).toContain('export declare const bar = "baz";')
-  })
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedModules = createResolvedModules([
+        entrypointPath,
+        resolveCwd(utilsFile),
+      ])
+      const entrypointPaths = [entrypointPath]
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-  it('should clean import statements from merged dts', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    const helperFile = join(testDir, 'helper.ts')
-    writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-    writeFileSync(utilsFile, 'import { bar } from "./helper.ts"\nexport const foo = "bar"')
-    writeFileSync(helperFile, 'export const bar = "baz"')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
-      entrypointPath,
-      resolveCwd(utilsFile),
-      resolveCwd(helperFile),
-    ])
-    const entrypointPaths = [entrypointPath]
-
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toMatch(/^\/\/ .+utils\.ts/)
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle multiple exported dependencies', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      const helperFile = join(testDir, 'helper.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts";\nexport { bar } from "./helper.ts";')
+      writeFileSync(utilsFile, 'export const foo = "bar"')
+      writeFileSync(helperFile, 'export const bar = "baz"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('foo')
-    expect(dtsContent).toContain('bar')
-    expect(dtsContent).not.toMatch(/from\s+['"]\.\/utils\.ts['"]/)
-    expect(dtsContent).not.toMatch(/from\s+['"]\.\/helper\.ts['"]/)
-  })
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedModules = createResolvedModules([
+        entrypointPath,
+        resolveCwd(utilsFile),
+        resolveCwd(helperFile),
+      ])
+      const entrypointPaths = [entrypointPath]
 
-  it('should handle importPath without leading dot', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
-    writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-    writeFileSync(utilsFile, 'import type { Something } from "some-package"\nexport const foo = "bar"')
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [
-      entrypointPath,
-      resolveCwd(utilsFile),
-    ])
-    const entrypointPaths = [entrypointPath]
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const foo = "bar";')
+      expect(dtsContent).toContain('export declare const bar = "baz";')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
-  })
+    it('should handle nested exported dependencies', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      const helperFile = join(testDir, 'helper.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
+      writeFileSync(utilsFile, 'export { bar } from "./helper.ts"\nexport const foo = "bar"')
+      writeFileSync(helperFile, 'export const bar = "baz"')
 
-  it('should handle imports without file extension', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const commandFile = join(testDir, 'command.ts')
-    writeFileSync(entryFile, 'export * as cmd from "./command"')
-    writeFileSync(commandFile, 'export const run = (): void => {}')
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedModules = createResolvedModules([
+        entrypointPath,
+        resolveCwd(utilsFile),
+        resolveCwd(helperFile),
+      ])
+      const entrypointPaths = [entrypointPath]
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(commandFile)]))
-    const entrypointPaths = [entrypointPath]
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+      })
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const foo = "bar";')
+      expect(dtsContent).toContain('export declare const bar = "baz";')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle non-relative exported dependencies', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts";\nexport * as nodeprocess from "node:process";')
+      writeFileSync(utilsFile, 'export const foo = "bar"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('run')
-    // Should not contain the import statement since it's merged
-    expect(dtsContent).not.toMatch(/from\s+['"]\.\/command['"]/)
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedModules = createResolvedModules([
+        entrypointPath,
+        resolveCwd(utilsFile),
+      ])
+      const entrypointPaths = [entrypointPath]
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          dts(undefined, entrypointPaths, resolvedModules),
+        ],
+        target: 'node',
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const foo = "bar";')
+      expect(dtsContent).toContain('export * as nodeprocess from "node:process";')
+    })
   })
 
-  it('should handle tsx files without extension', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const componentFile = join(testDir, 'Component.tsx')
-    writeFileSync(entryFile, 'export { Component } from "./Component"')
-    // Use a simple tsx file without JSX to avoid needing react runtime
-    writeFileSync(componentFile, 'export const Component = "tsx-component"')
+  describe.todo('todo', () => {
+    it('should clean import statements from merged dts', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      const helperFile = join(testDir, 'helper.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
+      writeFileSync(utilsFile, 'import { bar } from "./helper.ts"\nexport const foo = "bar"')
+      writeFileSync(helperFile, 'export const bar = "baz"')
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(componentFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap = createResolvedModules(entrypointPath, [
+        entrypointPath,
+        resolveCwd(utilsFile),
+        resolveCwd(helperFile),
+      ])
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('foo')
+      expect(dtsContent).toContain('bar')
+      expect(dtsContent).not.toMatch(/from\s+['"]\.\/utils\.ts['"]/)
+      expect(dtsContent).not.toMatch(/from\s+['"]\.\/helper\.ts['"]/)
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle importPath without leading dot', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
+      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
+      writeFileSync(utilsFile, 'import type { Something } from "some-package"\nexport const foo = "bar"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('Component')
-  })
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap = createResolvedModules(entrypointPath, [
+        entrypointPath,
+        resolveCwd(utilsFile),
+      ])
+      const entrypointPaths = [entrypointPath]
 
-  it('should only include used exports from dependencies', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const commandFile = join(testDir, 'command.ts')
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
 
-    // command.ts exports multiple things: run, stop, status
-    writeFileSync(commandFile, `
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+    })
+
+    it('should handle imports without file extension', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const commandFile = join(testDir, 'command.ts')
+      writeFileSync(entryFile, 'export * as cmd from "./command"')
+      writeFileSync(commandFile, 'export const run = (): void => {}')
+
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(commandFile)]))
+      const entrypointPaths = [entrypointPath]
+
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('run')
+      // Should not contain the import statement since it's merged
+      expect(dtsContent).not.toMatch(/from\s+['"]\.\/command['"]/)
+    })
+
+    it('should handle tsx files without extension', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const componentFile = join(testDir, 'Component.tsx')
+      writeFileSync(entryFile, 'export { Component } from "./Component"')
+      // Use a simple tsx file without JSX to avoid needing react runtime
+      writeFileSync(componentFile, 'export const Component = "tsx-component"')
+
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(componentFile)]))
+      const entrypointPaths = [entrypointPath]
+
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('Component')
+    })
+
+    it('should only include used exports from dependencies', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const commandFile = join(testDir, 'command.ts')
+
+      // command.ts exports multiple things: run, stop, status
+      writeFileSync(commandFile, `
 export const run = (): void => {}
 export const stop = (): void => {}
 export const status = (): string => "running"
@@ -429,45 +452,45 @@ export interface CommandOptions {
 }
 `)
 
-    // index.ts only imports and re-exports 'run'
-    writeFileSync(entryFile, `import { run } from "./command"
+      // index.ts only imports and re-exports 'run'
+      writeFileSync(entryFile, `import { run } from "./command"
 export { run }
 `)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(commandFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(commandFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+
+      // Should contain 'run' since it's exported
+      expect(dtsContent).toContain('run')
+
+      // Should NOT contain 'stop', 'status', or 'CommandOptions' since they're not used
+      expect(dtsContent).not.toContain('stop')
+      expect(dtsContent).not.toContain('status')
+      expect(dtsContent).not.toContain('CommandOptions')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should only include types that are actually re-exported', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const typesFile = join(testDir, 'types.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-
-    // Should contain 'run' since it's exported
-    expect(dtsContent).toContain('run')
-
-    // Should NOT contain 'stop', 'status', or 'CommandOptions' since they're not used
-    expect(dtsContent).not.toContain('stop')
-    expect(dtsContent).not.toContain('status')
-    expect(dtsContent).not.toContain('CommandOptions')
-  })
-
-  it('should only include types that are actually re-exported', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const typesFile = join(testDir, 'types.ts')
-
-    // types.ts exports multiple interfaces
-    writeFileSync(typesFile, `
+      // types.ts exports multiple interfaces
+      writeFileSync(typesFile, `
 export interface User {
   id: number
   name: string
@@ -482,143 +505,143 @@ export interface Comment {
 }
 `)
 
-    // index.ts only re-exports User
-    writeFileSync(entryFile, `export type { User } from "./types"
+      // index.ts only re-exports User
+      writeFileSync(entryFile, `export type { User } from "./types"
 `)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+
+      // Should contain User since it's re-exported
+      expect(dtsContent).toContain('User')
+
+      // Should NOT contain Post or Comment since they're not re-exported
+      expect(dtsContent).not.toContain('Post')
+      expect(dtsContent).not.toContain('Comment')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle default export', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const configFile = join(testDir, 'config.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-
-    // Should contain User since it's re-exported
-    expect(dtsContent).toContain('User')
-
-    // Should NOT contain Post or Comment since they're not re-exported
-    expect(dtsContent).not.toContain('Post')
-    expect(dtsContent).not.toContain('Comment')
-  })
-
-  it('should handle default export', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const configFile = join(testDir, 'config.ts')
-
-    writeFileSync(configFile, `
+      writeFileSync(configFile, `
 const config = {
   name: "app",
   version: "1.0.0"
 }
 export default config
 `)
-    writeFileSync(entryFile, `import config from "./config"
+      writeFileSync(entryFile, `import config from "./config"
 export { config }
 `)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(configFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(configFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('config')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle renamed exports', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const utilsFile = join(testDir, 'utils.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('config')
-  })
+      writeFileSync(utilsFile, `export const internalName = "value"`)
+      writeFileSync(entryFile, `export { internalName as publicName } from "./utils"`)
 
-  it('should handle renamed exports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const utilsFile = join(testDir, 'utils.ts')
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(utilsFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    writeFileSync(utilsFile, `export const internalName = "value"`)
-    writeFileSync(entryFile, `export { internalName as publicName } from "./utils"`)
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(utilsFile)]))
-    const entrypointPaths = [entrypointPath]
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsContent = await Bun.file(dtsFile).text()
+      // Should contain the renamed export
+      expect(dtsContent).toContain('publicName')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle function exports', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const funcFile = join(testDir, 'func.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    // Should contain the renamed export
-    expect(dtsContent).toContain('publicName')
-  })
-
-  it('should handle function exports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const funcFile = join(testDir, 'func.ts')
-
-    writeFileSync(funcFile, `
+      writeFileSync(funcFile, `
 export function greet(name: string): string {
   return "Hello " + name
 }
 export function unused(): void {}
 `)
-    writeFileSync(entryFile, `export { greet } from "./func"`)
+      writeFileSync(entryFile, `export { greet } from "./func"`)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(funcFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(funcFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('greet')
+      expect(dtsContent).toContain('string')
+      // Should NOT contain unused function
+      expect(dtsContent).not.toContain('unused')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle class exports', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const classFile = join(testDir, 'MyClass.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('greet')
-    expect(dtsContent).toContain('string')
-    // Should NOT contain unused function
-    expect(dtsContent).not.toContain('unused')
-  })
-
-  it('should handle class exports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const classFile = join(testDir, 'MyClass.ts')
-
-    writeFileSync(classFile, `
+      writeFileSync(classFile, `
 export class MyClass {
   private value: number
   constructor(value: number) {
@@ -630,37 +653,37 @@ export class MyClass {
 }
 export class UnusedClass {}
 `)
-    writeFileSync(entryFile, `export { MyClass } from "./MyClass"`)
+      writeFileSync(entryFile, `export { MyClass } from "./MyClass"`)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(classFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(classFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('MyClass')
+      expect(dtsContent).toContain('getValue')
+      // Should NOT contain UnusedClass
+      expect(dtsContent).not.toContain('UnusedClass')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle enum exports', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const enumFile = join(testDir, 'enums.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('MyClass')
-    expect(dtsContent).toContain('getValue')
-    // Should NOT contain UnusedClass
-    expect(dtsContent).not.toContain('UnusedClass')
-  })
-
-  it('should handle enum exports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const enumFile = join(testDir, 'enums.ts')
-
-    writeFileSync(enumFile, `
+      writeFileSync(enumFile, `
 export enum Status {
   Active = "active",
   Inactive = "inactive"
@@ -669,70 +692,70 @@ export enum UnusedEnum {
   A, B
 }
 `)
-    writeFileSync(entryFile, `export { Status } from "./enums"`)
+      writeFileSync(entryFile, `export { Status } from "./enums"`)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(enumFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(enumFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('Status')
+      expect(dtsContent).toContain('Active')
+      // Should NOT contain UnusedEnum
+      expect(dtsContent).not.toContain('UnusedEnum')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle type alias exports', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const typesFile = join(testDir, 'types.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('Status')
-    expect(dtsContent).toContain('Active')
-    // Should NOT contain UnusedEnum
-    expect(dtsContent).not.toContain('UnusedEnum')
-  })
-
-  it('should handle type alias exports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const typesFile = join(testDir, 'types.ts')
-
-    writeFileSync(typesFile, `
+      writeFileSync(typesFile, `
 export type ID = string | number
 export type UnusedType = boolean
 `)
-    writeFileSync(entryFile, `export type { ID } from "./types"`)
+      writeFileSync(entryFile, `export type { ID } from "./types"`)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('ID')
+      // Should NOT contain UnusedType
+      expect(dtsContent).not.toContain('UnusedType')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle interface that extends another interface', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const typesFile = join(testDir, 'types.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('ID')
-    // Should NOT contain UnusedType
-    expect(dtsContent).not.toContain('UnusedType')
-  })
-
-  it('should handle interface that extends another interface', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const typesFile = join(testDir, 'types.ts')
-
-    writeFileSync(typesFile, `
+      writeFileSync(typesFile, `
 export interface Base {
   id: number
 }
@@ -740,37 +763,37 @@ export interface Extended extends Base {
   name: string
 }
 `)
-    // Only export Extended, but Base should be included as it's referenced
-    writeFileSync(entryFile, `export type { Extended } from "./types"`)
+      // Only export Extended, but Base should be included as it's referenced
+      writeFileSync(entryFile, `export type { Extended } from "./types"`)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
-    })
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('Extended')
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('Extended')
     // Base is a dependency of Extended, but current implementation may not include it
     // This is acceptable as TypeScript will resolve it when the types are used
-  })
+    })
 
-  it('should handle type that references another type', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const typesFile = join(testDir, 'types.ts')
+    it('should handle type that references another type', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const typesFile = join(testDir, 'types.ts')
 
-    writeFileSync(typesFile, `
+      writeFileSync(typesFile, `
 export interface User {
   id: number
   name: string
@@ -783,154 +806,154 @@ export interface Unused {
   value: string
 }
 `)
-    // Export Config which references User
-    writeFileSync(entryFile, `export type { Config } from "./types"`)
+      // Export Config which references User
+      writeFileSync(entryFile, `export type { Config } from "./types"`)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('Config')
+      // Should NOT contain Unused
+      expect(dtsContent).not.toContain('Unused')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle generic type exports', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const typesFile = join(testDir, 'types.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('Config')
-    // Should NOT contain Unused
-    expect(dtsContent).not.toContain('Unused')
-  })
-
-  it('should handle generic type exports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const typesFile = join(testDir, 'types.ts')
-
-    writeFileSync(typesFile, `
+      writeFileSync(typesFile, `
 export interface Result<T> {
   data: T
   error: string | null
 }
 export type AsyncResult<T> = Promise<Result<T>>
 `)
-    writeFileSync(entryFile, `export type { Result, AsyncResult } from "./types"`)
+      writeFileSync(entryFile, `export type { Result, AsyncResult } from "./types"`)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(typesFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('Result')
+      expect(dtsContent).toContain('AsyncResult')
+      expect(dtsContent).toContain('<T>')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle mixed value and type exports', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const moduleFile = join(testDir, 'module.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('Result')
-    expect(dtsContent).toContain('AsyncResult')
-    expect(dtsContent).toContain('<T>')
-  })
-
-  it('should handle mixed value and type exports', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const moduleFile = join(testDir, 'module.ts')
-
-    writeFileSync(moduleFile, `
+      writeFileSync(moduleFile, `
 export interface Options {
   timeout: number
 }
 export const DEFAULT_OPTIONS: Options = { timeout: 1000 }
 export function configure(opts: Options): void {}
 `)
-    writeFileSync(entryFile, `
+      writeFileSync(entryFile, `
 export type { Options } from "./module"
 export { DEFAULT_OPTIONS, configure } from "./module"
 `)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(moduleFile)]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath, resolveCwd(moduleFile)]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('Options')
+      expect(dtsContent).toContain('DEFAULT_OPTIONS')
+      expect(dtsContent).toContain('configure')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle deep transitive dependencies', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      const aFile = join(testDir, 'a.ts')
+      const bFile = join(testDir, 'b.ts')
+      const cFile = join(testDir, 'c.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('Options')
-    expect(dtsContent).toContain('DEFAULT_OPTIONS')
-    expect(dtsContent).toContain('configure')
-  })
+      // c.ts is the deepest dependency
+      writeFileSync(cFile, `export const deepValue = "deep"`)
+      // b.ts imports from c
+      writeFileSync(bFile, `export { deepValue } from "./c"`)
+      // a.ts imports from b
+      writeFileSync(aFile, `export { deepValue } from "./b"`)
+      // entry imports from a
+      writeFileSync(entryFile, `export { deepValue } from "./a"`)
 
-  it('should handle deep transitive dependencies', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    const aFile = join(testDir, 'a.ts')
-    const bFile = join(testDir, 'b.ts')
-    const cFile = join(testDir, 'c.ts')
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([
+        entrypointPath,
+        resolveCwd(aFile),
+        resolveCwd(bFile),
+        resolveCwd(cFile),
+      ]))
+      const entrypointPaths = [entrypointPath]
 
-    // c.ts is the deepest dependency
-    writeFileSync(cFile, `export const deepValue = "deep"`)
-    // b.ts imports from c
-    writeFileSync(bFile, `export { deepValue } from "./c"`)
-    // a.ts imports from b
-    writeFileSync(aFile, `export { deepValue } from "./b"`)
-    // entry imports from a
-    writeFileSync(entryFile, `export { deepValue } from "./a"`)
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([
-      entrypointPath,
-      resolveCwd(aFile),
-      resolveCwd(bFile),
-      resolveCwd(cFile),
-    ]))
-    const entrypointPaths = [entrypointPath]
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('deepValue')
+      // Should not have any relative imports
+      expect(dtsContent).not.toMatch(/from\s+['"]\.\//)
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should handle export with inline declaration', async () => {
+      const entryFile = join(testDir, 'index.ts')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('deepValue')
-    // Should not have any relative imports
-    expect(dtsContent).not.toMatch(/from\s+['"]\.\//)
-  })
-
-  it('should handle export with inline declaration', async () => {
-    const entryFile = join(testDir, 'index.ts')
-
-    writeFileSync(entryFile, `
+      writeFileSync(entryFile, `
 export const VERSION = "1.0.0"
 export interface AppConfig {
   name: string
@@ -942,70 +965,71 @@ export class App {
 }
 `)
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entrypointPath, new Set([entrypointPath]))
-    const entrypointPaths = [entrypointPath]
+      const entrypointPath = resolveCwd(entryFile)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entrypointPath, new Set([entrypointPath]))
+      const entrypointPaths = [entrypointPath]
 
-    await Bun.build({
-      entrypoints: [entryFile],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      await Bun.build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('VERSION')
+      expect(dtsContent).toContain('AppConfig')
+      expect(dtsContent).toContain('init')
+      expect(dtsContent).toContain('App')
     })
 
-    const dtsFile = join(testOutDir, 'index.d.ts')
-    expect(existsSync(dtsFile)).toBe(true)
+    it('should generate separate dts for multiple entrypoints', async () => {
+      const entry1File = join(testDir, 'entry1.ts')
+      const entry2File = join(testDir, 'entry2.ts')
+      const utils1File = join(testDir, 'utils1.ts')
+      const utils2File = join(testDir, 'utils2.ts')
+      writeFileSync(entry1File, 'export { foo } from "./utils1.ts"')
+      writeFileSync(entry2File, 'export { bar } from "./utils2.ts"')
+      writeFileSync(utils1File, 'export const foo = "foo"')
+      writeFileSync(utils2File, 'export const bar = "bar"')
 
-    const dtsContent = await Bun.file(dtsFile).text()
-    expect(dtsContent).toContain('VERSION')
-    expect(dtsContent).toContain('AppConfig')
-    expect(dtsContent).toContain('init')
-    expect(dtsContent).toContain('App')
-  })
+      const entry1Path = resolveCwd(entry1File)
+      const entry2Path = resolveCwd(entry2File)
+      const resolvedFilesMap: ResolvedModuleMap = new Map()
+      resolvedFilesMap.set(entry1Path, new Set([entry1Path, resolveCwd(utils1File)]))
+      resolvedFilesMap.set(entry2Path, new Set([entry2Path, resolveCwd(utils2File)]))
+      const entrypointPaths = [entry1Path, entry2Path]
 
-  it('should generate separate dts for multiple entrypoints', async () => {
-    const entry1File = join(testDir, 'entry1.ts')
-    const entry2File = join(testDir, 'entry2.ts')
-    const utils1File = join(testDir, 'utils1.ts')
-    const utils2File = join(testDir, 'utils2.ts')
-    writeFileSync(entry1File, 'export { foo } from "./utils1.ts"')
-    writeFileSync(entry2File, 'export { bar } from "./utils2.ts"')
-    writeFileSync(utils1File, 'export const foo = "foo"')
-    writeFileSync(utils2File, 'export const bar = "bar"')
+      await Bun.build({
+        entrypoints: [entry1File, entry2File],
+        outdir: testOutDir,
+        plugins: [
+          (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
+          dts(resolvedFilesMap, entrypointPaths),
+        ],
+      })
 
-    const entry1Path = resolveCwd(entry1File)
-    const entry2Path = resolveCwd(entry2File)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entry1Path, new Set([entry1Path, resolveCwd(utils1File)]))
-    resolvedFilesMap.set(entry2Path, new Set([entry2Path, resolveCwd(utils2File)]))
-    const entrypointPaths = [entry1Path, entry2Path]
+      const dts1File = join(testOutDir, 'entry1.d.ts')
+      const dts2File = join(testOutDir, 'entry2.d.ts')
+      expect(existsSync(dts1File)).toBe(true)
+      expect(existsSync(dts2File)).toBe(true)
 
-    await Bun.build({
-      entrypoints: [entry1File, entry2File],
-      outdir: testOutDir,
-      plugins: [
-        (await import('../src/resolve.ts')).resolve(resolvedFilesMap, entrypointPaths),
-        dts(resolvedFilesMap, entrypointPaths),
-      ],
+      const dts1Content = await Bun.file(dts1File).text()
+      const dts2Content = await Bun.file(dts2File).text()
+
+      // entry1.d.ts should only contain foo, not bar
+      expect(dts1Content).toContain('foo')
+      expect(dts1Content).not.toContain('bar')
+
+      // entry2.d.ts should only contain bar, not foo
+      expect(dts2Content).toContain('bar')
+      expect(dts2Content).not.toContain('foo')
     })
-
-    const dts1File = join(testOutDir, 'entry1.d.ts')
-    const dts2File = join(testOutDir, 'entry2.d.ts')
-    expect(existsSync(dts1File)).toBe(true)
-    expect(existsSync(dts2File)).toBe(true)
-
-    const dts1Content = await Bun.file(dts1File).text()
-    const dts2Content = await Bun.file(dts2File).text()
-
-    // entry1.d.ts should only contain foo, not bar
-    expect(dts1Content).toContain('foo')
-    expect(dts1Content).not.toContain('bar')
-
-    // entry2.d.ts should only contain bar, not foo
-    expect(dts2Content).toContain('bar')
-    expect(dts2Content).not.toContain('foo')
   })
 })

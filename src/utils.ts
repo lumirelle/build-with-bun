@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import process from 'node:process'
-import { normalize, resolve } from 'pathe'
+import { dirname, normalize, relative, resolve } from 'pathe'
 import { RE_TS, TS_EXTENSIONS } from './constants'
 
 export const cwd = normalize(process.cwd())
@@ -37,4 +37,43 @@ export function tryResolveTs(basePath: string): string | null {
   }
 
   return null
+}
+
+/**
+ * Extract the common ancestor directory from a list of paths.
+ *
+ * If all paths are based on the current working directory, the result is relative to it.
+ *
+ * Otherwise, the result is an absolute path.
+ *
+ * @param paths The list of paths.
+ * @returns The common ancestor directory.
+ */
+export function extractCommonAncestor(paths: string[]): string {
+  if (paths.length === 0)
+    return '.'
+  if (paths.length === 1)
+    return dirname(paths[0]!)
+
+  const splitPaths = paths.map(p => resolveCwd(p).split('/'))
+  const minLength = Math.min(...splitPaths.map(parts => parts.length))
+  const hasAnyNotBasedCwd = paths.some(p => relative(cwd, p).startsWith('..'))
+  const commonParts: string[] = []
+
+  for (let i = 0; i < minLength; i++) {
+    const part = splitPaths[0]![i]!
+    if (splitPaths.some(parts => parts[i] !== part))
+      break
+    commonParts.push(part)
+  }
+
+  const commonAncestor = commonParts.join('/')
+
+  // If is system root path, postfix with '/' (e.g. '/' or 'C:/')
+  if (process.platform === 'win32' && /^[a-z]:$/i.test(commonAncestor))
+    return `${commonAncestor}/`
+  else if (commonAncestor === '')
+    return '/'
+
+  return hasAnyNotBasedCwd ? commonAncestor : relative(cwd, commonAncestor) || '.'
 }
