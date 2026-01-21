@@ -90,6 +90,20 @@ describe('utils', () => {
       expect(tryResolveTs(filePath)).toBe(filePath)
     })
 
+    it('should resolve existing .mts file with extension', () => {
+      const filePath = join(testDir, 'module.mts')
+      writeFileSync(filePath, 'export const mod = 1')
+
+      expect(tryResolveTs(filePath)).toBe(filePath)
+    })
+
+    it('should resolve existing .cts file with extension', () => {
+      const filePath = join(testDir, 'module.cts')
+      writeFileSync(filePath, 'export const mod = 1')
+
+      expect(tryResolveTs(filePath)).toBe(filePath)
+    })
+
     it('should return null for non-existing file with extension', () => {
       const filePath = join(testDir, 'nonexistent.ts')
 
@@ -120,6 +134,14 @@ describe('utils', () => {
       expect(tryResolveTs(basePath)).toBe(filePath)
     })
 
+    it('should resolve .cts file without extension', () => {
+      const filePath = join(testDir, 'module.cts')
+      writeFileSync(filePath, 'export const mod = 1')
+
+      const basePath = join(testDir, 'module')
+      expect(tryResolveTs(basePath)).toBe(filePath)
+    })
+
     it('should resolve index.ts in directory', () => {
       const subDir = join(testDir, 'subdir')
       mkdirSync(subDir, { recursive: true })
@@ -138,6 +160,24 @@ describe('utils', () => {
       expect(tryResolveTs(subDir)).toBe(indexPath)
     })
 
+    it('should resolve index.mts in directory', () => {
+      const subDir = join(testDir, 'modules')
+      mkdirSync(subDir, { recursive: true })
+      const indexPath = join(subDir, 'index.mts')
+      writeFileSync(indexPath, 'export const mod = 1')
+
+      expect(tryResolveTs(subDir)).toBe(indexPath)
+    })
+
+    it('should resolve index.cts in directory', () => {
+      const subDir = join(testDir, 'commonjs-modules')
+      mkdirSync(subDir, { recursive: true })
+      const indexPath = join(subDir, 'index.cts')
+      writeFileSync(indexPath, 'export const mod = 1')
+
+      expect(tryResolveTs(subDir)).toBe(indexPath)
+    })
+
     it('should return null for non-existing path without extension', () => {
       const basePath = join(testDir, 'nonexistent')
 
@@ -152,6 +192,18 @@ describe('utils', () => {
 
       const basePath = join(testDir, 'file')
       expect(tryResolveTs(basePath)).toBe(tsPath)
+    })
+
+    it('should prefer file with extension over index file in directory', () => {
+      const filePath = join(testDir, 'module.ts')
+      writeFileSync(filePath, 'export const mod = 1')
+
+      const subDir = join(testDir, 'module')
+      mkdirSync(subDir, { recursive: true })
+      const indexPath = join(subDir, 'index.ts')
+      writeFileSync(indexPath, 'export const indexMod = 1')
+
+      expect(tryResolveTs(join(testDir, 'module'))).toBe(filePath)
     })
   })
 })

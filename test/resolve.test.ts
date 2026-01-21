@@ -3,208 +3,138 @@ import { beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { build } from '../src/build.ts'
 import { resolve } from '../src/resolve.ts'
 import { resolveCwd } from '../src/utils.ts'
 
-describe.todo('resolve', () => {
+describe('resolve', () => {
   const testDir = join(tmpdir(), 'resolve-test')
-  let resolvedFilesMap: ResolvedModuleMap
+  const resolvedModuleMap: ResolvedModuleMap = new Map()
+  const resolvedModules = new Set<string>()
 
   beforeEach(() => {
     mkdirSync(testDir, { recursive: true })
-    resolvedFilesMap = new Map()
+    resolvedModuleMap.clear()
+    resolvedModules.clear()
   })
 
-  it('should add entrypoints to resolvedFilesMap on start', async () => {
+  it('should add entrypoints to resolvedModuleMap on start', async () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPaths = [resolveCwd(entryFile)]
-    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+    const resolvedEntry = resolveCwd(entryFile)
+    const entrypointPaths = [resolvedEntry]
 
-    const startCallbacks: Array<() => void> = []
-    const builder = {
-      config: {
-        entrypoints: [entryFile],
-      },
-      onStart: (callback: () => void) => {
-        startCallbacks.push(callback)
-      },
-      onResolve: () => {},
-    } as any
+    await build({
+      entrypoints: [entryFile],
+      plugins: [
+        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+      ],
+    })
 
-    plugin.setup(builder)
-    startCallbacks.forEach(cb => cb())
-
-    const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
+    expect(resolvedModuleMap.size).toBe(1)
+    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
     expect(entrypointFiles).toBeDefined()
-    expect(entrypointFiles?.has(resolveCwd(entryFile))).toBe(true)
+    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
   })
 
-  it('should resolve dependencies from entrypoints', () => {
+  it('should resolve dependent modules to resolvedModuleMap from entrypoints', async () => {
     const entryFile = join(testDir, 'index.ts')
     const utilsFile = join(testDir, 'utils.ts')
     writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
     writeFileSync(utilsFile, 'export const foo = "bar"')
 
-    const entrypointPaths = [resolveCwd(entryFile)]
-    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+    const resolvedEntry = resolveCwd(entryFile)
+    const resolvedUtils = resolveCwd(utilsFile)
+    const entrypointPaths = [resolvedEntry]
 
-    const startCallbacks: Array<() => void> = []
-    const resolveCallbacks: Array<(args: any) => any> = []
-    const builder = {
-      config: {
-        entrypoints: [entryFile],
-      },
-      onStart: (callback: () => void) => {
-        startCallbacks.push(callback)
-      },
-      onResolve: (options: any, callback: (args: any) => any) => {
-        resolveCallbacks.push(callback)
-      },
-    } as any
+    await build({
+      entrypoints: [entryFile],
+      plugins: [
+        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+      ],
+    })
 
-    plugin.setup(builder)
-    startCallbacks.forEach(cb => cb())
-
-    const resolveCallback = resolveCallbacks[0]
-    expect(resolveCallback).toBeDefined()
-    if (resolveCallback) {
-      const result = resolveCallback({
-        path: './utils.ts',
-        importer: entryFile,
-      })
-
-      expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
-      expect(entrypointFiles?.has(resolveCwd(utilsFile))).toBe(true)
-    }
+    expect(resolvedModuleMap.size).toBe(1)
+    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
+    expect(entrypointFiles).toBeDefined()
+    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
+    expect(entrypointFiles?.has(resolvedUtils)).toBe(true)
   })
 
-  it('should not resolve files from non-entrypoint imports', () => {
+  it('should not resolve files from non-entrypoint imports', async () => {
     const entryFile = join(testDir, 'index.ts')
     const otherFile = join(testDir, 'other.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
     writeFileSync(otherFile, 'export const other = "value"')
 
-    const entrypointPaths = [resolveCwd(entryFile)]
-    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+    const resolvedEntry = resolveCwd(entryFile)
+    const resolvedOther = resolveCwd(otherFile)
+    const entrypointPaths = [resolvedEntry]
 
-    const startCallbacks: Array<() => void> = []
-    const resolveCallbacks: Array<(args: any) => any> = []
-    const builder = {
-      config: {
-        entrypoints: [entryFile],
-      },
-      onStart: (callback: () => void) => {
-        startCallbacks.push(callback)
-      },
-      onResolve: (options: any, callback: (args: any) => any) => {
-        resolveCallbacks.push(callback)
-      },
-    } as any
+    await build({
+      entrypoints: [entryFile],
+      plugins: [
+        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+      ],
+    })
 
-    plugin.setup(builder)
-    startCallbacks.forEach(cb => cb())
-
-    const resolveCallback = resolveCallbacks[0]
-    expect(resolveCallback).toBeDefined()
-    if (resolveCallback) {
-      const result = resolveCallback({
-        path: './other.ts',
-        importer: otherFile,
-      })
-
-      expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
-      expect(entrypointFiles?.has(resolveCwd(otherFile))).toBe(false)
-    }
+    expect(resolvedModuleMap.size).toBe(1)
+    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
+    expect(entrypointFiles).toBeDefined()
+    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
+    expect(entrypointFiles?.has(resolvedOther)).toBe(false)
   })
 
-  it('should resolve imports without file extension', () => {
+  it('should resolve ts imports without file extension', async () => {
     const entryFile = join(testDir, 'index.ts')
     const commandFile = join(testDir, 'command.ts')
     writeFileSync(entryFile, 'export * as cmd from "./command"')
     writeFileSync(commandFile, 'export const run = () => {}')
 
-    const entrypointPaths = [resolveCwd(entryFile)]
-    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+    const resolvedEntry = resolveCwd(entryFile)
+    const resolvedCommand = resolveCwd(commandFile)
+    const entrypointPaths = [resolvedEntry]
 
-    const startCallbacks: Array<() => void> = []
-    const resolveCallbacks: Array<(args: any) => any> = []
-    const builder = {
-      config: {
-        entrypoints: [entryFile],
-      },
-      onStart: (callback: () => void) => {
-        startCallbacks.push(callback)
-      },
-      onResolve: (options: any, callback: (args: any) => any) => {
-        resolveCallbacks.push(callback)
-      },
-    } as any
+    await build({
+      entrypoints: [entryFile],
+      plugins: [
+        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+      ],
+    })
 
-    plugin.setup(builder)
-    startCallbacks.forEach(cb => cb())
-
-    // Find the callback for relative imports (RE_RELATIVE filter)
-    const resolveCallback = resolveCallbacks[1] // Second callback is for relative imports
-    expect(resolveCallback).toBeDefined()
-    if (resolveCallback) {
-      const result = resolveCallback({
-        path: './command', // No extension
-        importer: entryFile,
-      })
-
-      expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
-      // Should resolve to command.ts
-      expect(entrypointFiles?.has(resolveCwd(commandFile))).toBe(true)
-    }
+    expect(resolvedModuleMap.size).toBe(1)
+    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
+    expect(entrypointFiles).toBeDefined()
+    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
+    expect(entrypointFiles?.has(resolvedCommand)).toBe(true)
   })
 
-  it('should resolve tsx imports without file extension', () => {
+  it('should resolve tsx imports without file extension', async () => {
     const entryFile = join(testDir, 'index.ts')
     const componentFile = join(testDir, 'Component.tsx')
     writeFileSync(entryFile, 'export { Component } from "./Component"')
     writeFileSync(componentFile, 'export const Component = () => <div />')
 
-    const entrypointPaths = [resolveCwd(entryFile)]
-    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+    const resolvedEntry = resolveCwd(entryFile)
+    const resolvedComponent = resolveCwd(componentFile)
+    const entrypointPaths = [resolvedEntry]
 
-    const startCallbacks: Array<() => void> = []
-    const resolveCallbacks: Array<(args: any) => any> = []
-    const builder = {
-      config: {
-        entrypoints: [entryFile],
-      },
-      onStart: (callback: () => void) => {
-        startCallbacks.push(callback)
-      },
-      onResolve: (options: any, callback: (args: any) => any) => {
-        resolveCallbacks.push(callback)
-      },
-    } as any
+    await build({
+      entrypoints: [entryFile],
+      plugins: [
+        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+      ],
+    })
 
-    plugin.setup(builder)
-    startCallbacks.forEach(cb => cb())
-
-    const resolveCallback = resolveCallbacks[1]
-    expect(resolveCallback).toBeDefined()
-    if (resolveCallback) {
-      const result = resolveCallback({
-        path: './Component', // No extension
-        importer: entryFile,
-      })
-
-      expect(result).toBeUndefined()
-      const entrypointFiles = resolvedFilesMap.get(resolveCwd(entryFile))
-      // Should resolve to Component.tsx
-      expect(entrypointFiles?.has(resolveCwd(componentFile))).toBe(true)
-    }
+    expect(resolvedModuleMap.size).toBe(1)
+    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
+    expect(entrypointFiles).toBeDefined()
+    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
+    expect(entrypointFiles?.has(resolvedComponent)).toBe(true)
   })
 
-  it('should track dependencies separately for multiple entrypoints', () => {
+  it('should track dependencies separately for multiple entrypoints', async () => {
     const entryFile1 = join(testDir, 'entry1.ts')
     const entryFile2 = join(testDir, 'entry2.ts')
     const utils1File = join(testDir, 'utils1.ts')
@@ -214,50 +144,31 @@ describe.todo('resolve', () => {
     writeFileSync(utils1File, 'export const foo = "foo"')
     writeFileSync(utils2File, 'export const bar = "bar"')
 
-    const entrypointPaths = [resolveCwd(entryFile1), resolveCwd(entryFile2)]
-    const plugin = resolve(resolvedFilesMap, entrypointPaths)
+    const resolvedEntry1 = resolveCwd(entryFile1)
+    const resolvedEntry2 = resolveCwd(entryFile2)
+    const resolvedUtils1 = resolveCwd(utils1File)
+    const resolvedUtils2 = resolveCwd(utils2File)
+    const entrypointPaths = [resolvedEntry1, resolvedEntry2]
 
-    const startCallbacks: Array<() => void> = []
-    const resolveCallbacks: Array<(args: any) => any> = []
-    const builder = {
-      config: {
-        entrypoints: [entryFile1, entryFile2],
-      },
-      onStart: (callback: () => void) => {
-        startCallbacks.push(callback)
-      },
-      onResolve: (options: any, callback: (args: any) => any) => {
-        resolveCallbacks.push(callback)
-      },
-    } as any
+    await build({
+      entrypoints: [entryFile1, entryFile2],
+      plugins: [
+        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+      ],
+    })
 
-    plugin.setup(builder)
-    startCallbacks.forEach(cb => cb())
+    expect(resolvedModuleMap.size).toBe(2)
 
-    const resolveCallback = resolveCallbacks[0]
-    expect(resolveCallback).toBeDefined()
-    if (resolveCallback) {
-      // entry1 imports utils1
-      resolveCallback({
-        path: './utils1.ts',
-        importer: entryFile1,
-      })
+    const entrypoint1Files = resolvedModuleMap.get(resolvedEntry1)
+    expect(entrypoint1Files).toBeDefined()
+    expect(entrypoint1Files?.has(resolvedEntry1)).toBe(true)
+    expect(entrypoint1Files?.has(resolvedUtils1)).toBe(true)
+    expect(entrypoint1Files?.has(resolvedUtils2)).toBe(false)
 
-      // entry2 imports utils2
-      resolveCallback({
-        path: './utils2.ts',
-        importer: entryFile2,
-      })
-
-      // Check entry1's dependencies
-      const entry1Files = resolvedFilesMap.get(resolveCwd(entryFile1))
-      expect(entry1Files?.has(resolveCwd(utils1File))).toBe(true)
-      expect(entry1Files?.has(resolveCwd(utils2File))).toBe(false)
-
-      // Check entry2's dependencies
-      const entry2Files = resolvedFilesMap.get(resolveCwd(entryFile2))
-      expect(entry2Files?.has(resolveCwd(utils2File))).toBe(true)
-      expect(entry2Files?.has(resolveCwd(utils1File))).toBe(false)
-    }
+    const entrypoint2Files = resolvedModuleMap.get(resolvedEntry2)
+    expect(entrypoint2Files).toBeDefined()
+    expect(entrypoint2Files?.has(resolvedEntry2)).toBe(true)
+    expect(entrypoint2Files?.has(resolvedUtils2)).toBe(true)
+    expect(entrypoint2Files?.has(resolvedUtils1)).toBe(false)
   })
 })
