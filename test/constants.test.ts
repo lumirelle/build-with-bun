@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { RE_RELATIVE, RE_TS, TS_EXTENSIONS } from '../src/constants.ts'
 
-describe('regex', () => {
+describe('constants', () => {
   describe('RE_TS', () => {
     it('should match .ts files', () => {
       expect(RE_TS.exec('file.ts')).toBeTruthy()
