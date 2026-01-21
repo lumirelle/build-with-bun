@@ -1,4 +1,3 @@
-import type { ResolvedModuleMap } from '../src/types.ts'
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,16 +8,14 @@ import { resolveCwd } from '../src/utils.ts'
 
 describe('resolve', () => {
   const testDir = join(tmpdir(), 'resolve-test')
-  const resolvedModuleMap: ResolvedModuleMap = new Map()
   const resolvedModules = new Set<string>()
 
   beforeEach(() => {
     mkdirSync(testDir, { recursive: true })
-    resolvedModuleMap.clear()
     resolvedModules.clear()
   })
 
-  it('should add entrypoints to resolvedModuleMap on start', async () => {
+  it('should add entrypoints to resolvedModules on start', async () => {
     const entryFile = join(testDir, 'index.ts')
     writeFileSync(entryFile, 'export const hello = "world"')
 
@@ -27,18 +24,16 @@ describe('resolve', () => {
 
     await build({
       entrypoints: [entryFile],
+      dts: false,
       plugins: [
-        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+        resolve(entrypointPaths, resolvedModules),
       ],
     })
 
-    expect(resolvedModuleMap.size).toBe(1)
-    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
-    expect(entrypointFiles).toBeDefined()
-    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
+    expect(resolvedModules.has(resolvedEntry)).toBe(true)
   })
 
-  it('should resolve dependent modules to resolvedModuleMap from entrypoints', async () => {
+  it('should resolve dependent modules to resolvedModules from entrypoints', async () => {
     const entryFile = join(testDir, 'index.ts')
     const utilsFile = join(testDir, 'utils.ts')
     writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
@@ -50,16 +45,14 @@ describe('resolve', () => {
 
     await build({
       entrypoints: [entryFile],
+      dts: false,
       plugins: [
-        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+        resolve(entrypointPaths, resolvedModules),
       ],
     })
 
-    expect(resolvedModuleMap.size).toBe(1)
-    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
-    expect(entrypointFiles).toBeDefined()
-    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
-    expect(entrypointFiles?.has(resolvedUtils)).toBe(true)
+    expect(resolvedModules.has(resolvedEntry)).toBe(true)
+    expect(resolvedModules.has(resolvedUtils)).toBe(true)
   })
 
   it('should not resolve files from non-entrypoint imports', async () => {
@@ -74,16 +67,14 @@ describe('resolve', () => {
 
     await build({
       entrypoints: [entryFile],
+      dts: false,
       plugins: [
-        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+        resolve(entrypointPaths, resolvedModules),
       ],
     })
 
-    expect(resolvedModuleMap.size).toBe(1)
-    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
-    expect(entrypointFiles).toBeDefined()
-    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
-    expect(entrypointFiles?.has(resolvedOther)).toBe(false)
+    expect(resolvedModules.has(resolvedEntry)).toBe(true)
+    expect(resolvedModules.has(resolvedOther)).toBe(false)
   })
 
   it('should resolve ts imports without file extension', async () => {
@@ -98,16 +89,14 @@ describe('resolve', () => {
 
     await build({
       entrypoints: [entryFile],
+      dts: false,
       plugins: [
-        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+        resolve(entrypointPaths, resolvedModules),
       ],
     })
 
-    expect(resolvedModuleMap.size).toBe(1)
-    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
-    expect(entrypointFiles).toBeDefined()
-    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
-    expect(entrypointFiles?.has(resolvedCommand)).toBe(true)
+    expect(resolvedModules.has(resolvedEntry)).toBe(true)
+    expect(resolvedModules.has(resolvedCommand)).toBe(true)
   })
 
   it('should resolve tsx imports without file extension', async () => {
@@ -122,16 +111,14 @@ describe('resolve', () => {
 
     await build({
       entrypoints: [entryFile],
+      dts: false,
       plugins: [
-        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+        resolve(entrypointPaths, resolvedModules),
       ],
     })
 
-    expect(resolvedModuleMap.size).toBe(1)
-    const entrypointFiles = resolvedModuleMap.get(resolvedEntry)
-    expect(entrypointFiles).toBeDefined()
-    expect(entrypointFiles?.has(resolvedEntry)).toBe(true)
-    expect(entrypointFiles?.has(resolvedComponent)).toBe(true)
+    expect(resolvedModules.has(resolvedEntry)).toBe(true)
+    expect(resolvedModules.has(resolvedComponent)).toBe(true)
   })
 
   it('should track dependencies separately for multiple entrypoints', async () => {
@@ -152,23 +139,15 @@ describe('resolve', () => {
 
     await build({
       entrypoints: [entryFile1, entryFile2],
+      dts: false,
       plugins: [
-        resolve(entrypointPaths, resolvedModuleMap, resolvedModules),
+        resolve(entrypointPaths, resolvedModules),
       ],
     })
 
-    expect(resolvedModuleMap.size).toBe(2)
-
-    const entrypoint1Files = resolvedModuleMap.get(resolvedEntry1)
-    expect(entrypoint1Files).toBeDefined()
-    expect(entrypoint1Files?.has(resolvedEntry1)).toBe(true)
-    expect(entrypoint1Files?.has(resolvedUtils1)).toBe(true)
-    expect(entrypoint1Files?.has(resolvedUtils2)).toBe(false)
-
-    const entrypoint2Files = resolvedModuleMap.get(resolvedEntry2)
-    expect(entrypoint2Files).toBeDefined()
-    expect(entrypoint2Files?.has(resolvedEntry2)).toBe(true)
-    expect(entrypoint2Files?.has(resolvedUtils2)).toBe(true)
-    expect(entrypoint2Files?.has(resolvedUtils1)).toBe(false)
+    expect(resolvedModules.has(resolvedEntry1)).toBe(true)
+    expect(resolvedModules.has(resolvedEntry2)).toBe(true)
+    expect(resolvedModules.has(resolvedUtils1)).toBe(true)
+    expect(resolvedModules.has(resolvedUtils2)).toBe(true)
   })
 })

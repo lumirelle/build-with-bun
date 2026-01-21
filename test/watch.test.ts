@@ -1,150 +1,66 @@
-import type { ResolvedModuleMap } from '../src/types.ts'
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import type { mock } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
+import { existsSync, watch as fsWatch, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { resolveCwd } from '../src/utils.ts'
-import { watch } from '../src/watch.ts'
+import { build } from '../src/build.ts'
 
-/**
- * Helper to create a ResolvedFilesMap from entrypoint and its files.
- */
-function createResolvedFilesMap(entrypoint: string, files: string[]): ResolvedModuleMap {
-  const map: ResolvedModuleMap = new Map()
-  map.set(entrypoint, new Set(files))
-  return map
-}
-
-describe.todo('watch', () => {
+describe('watch', () => {
   const testDir = join(tmpdir(), 'watch-test')
+  const testOutDir = join(testDir, 'dist')
+  let spiedConsoleInfo: ReturnType<typeof mock<typeof console.info>>
 
   beforeEach(() => {
     if (existsSync(testDir))
       rmSync(testDir, { recursive: true, force: true })
     mkdirSync(testDir, { recursive: true })
+    spiedConsoleInfo = spyOn(console, 'info')
   })
 
   afterEach(() => {
     if (existsSync(testDir))
       rmSync(testDir, { recursive: true, force: true })
+    spiedConsoleInfo.mockRestore()
   })
 
-  it('should create watch plugin', () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+  describe('fs watch', () => {
+    it('should watch file changes and trigger callback', async () => {
+      const filePath = join(testDir, 'file.txt')
+      writeFileSync(filePath, 'initial content')
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    const plugin = watch({}, resolvedFilesMap)
+      let callbackCalled = false
+      const watcher = fsWatch(filePath, () => {
+        callbackCalled = true
+      })
 
-    expect(plugin.name).toBe('watch')
-    expect(plugin.setup).toBeDefined()
-  })
+      // Simulate file change
+      writeFileSync(filePath, 'updated content')
+      // Wait a bit to ensure watcher picks up the change
+      await new Promise(resolve => setTimeout(resolve, 100))
 
-  it('should call onRebuild when file changes', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    let rebuildCalled = false
-
-    const plugin = watch({
-      onRebuild: async () => {
-        rebuildCalled = true
-      },
-      debounce: 10,
-    }, resolvedFilesMap)
-
-    const endCallbacks: Array<(result: any) => Promise<void>> = []
-    const builder = {
-      config: {
-        entrypoints: [entryFile],
-      },
-      onEnd: (callback: (result: any) => Promise<void>) => {
-        endCallbacks.push(callback)
-      },
-    } as any
-
-    plugin.setup(builder)
-
-    expect(endCallbacks.length).toBe(1)
-    await endCallbacks[0]!({ success: true })
-
-    await new Promise(resolve => setTimeout(resolve, 20))
-
-    writeFileSync(entryFile, 'export const hello = "updated"')
-
-    await new Promise(resolve => setTimeout(resolve, 30))
-
-    expect(rebuildCalled).toBe(true)
-  })
-
-  it('should not call onRebuild when build fails', async () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
-
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    let rebuildCalled = false
-
-    const plugin = watch({
-      onRebuild: async () => {
-        rebuildCalled = true
-      },
-    }, resolvedFilesMap)
-
-    const builder = {
-      config: {
-        entrypoints: [entryFile],
-      },
-      onEnd: async (callback: (result: any) => Promise<void>) => {
-        await callback({ success: false })
-      },
-    } as any
-
-    plugin.setup(builder)
-    await builder.onEnd(async (result: any) => {
-      if (result.success) {
-        // Watch plugin should not set up watchers on failed builds
-      }
+      expect(callbackCalled).toBe(true)
+      watcher.close()
     })
-
-    expect(rebuildCalled).toBe(false)
   })
 
-  it('should use custom debounce value', () => {
-    const entryFile = join(testDir, 'index.ts')
-    writeFileSync(entryFile, 'export const hello = "world"')
+  describe('watch plugin', () => {
+    it('should call onRebuild when file changes', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
 
-    const entrypointPath = resolveCwd(entryFile)
-    const resolvedFilesMap = createResolvedFilesMap(entrypointPath, [entrypointPath])
-    const plugin = watch({
-      debounce: 100,
-    }, resolvedFilesMap)
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: false,
+        watch: true,
+      })
 
-    expect(plugin.name).toBe('watch')
-  })
+      expect(spiedConsoleInfo).toHaveBeenCalledTimes(1)
 
-  it('should watch files from multiple entrypoints', () => {
-    const entry1File = join(testDir, 'entry1.ts')
-    const entry2File = join(testDir, 'entry2.ts')
-    const utils1File = join(testDir, 'utils1.ts')
-    const utils2File = join(testDir, 'utils2.ts')
-    writeFileSync(entry1File, 'export { foo } from "./utils1.ts"')
-    writeFileSync(entry2File, 'export { bar } from "./utils2.ts"')
-    writeFileSync(utils1File, 'export const foo = "foo"')
-    writeFileSync(utils2File, 'export const bar = "bar"')
-
-    const entry1Path = resolveCwd(entry1File)
-    const entry2Path = resolveCwd(entry2File)
-    const resolvedFilesMap: ResolvedModuleMap = new Map()
-    resolvedFilesMap.set(entry1Path, new Set([entry1Path, resolveCwd(utils1File)]))
-    resolvedFilesMap.set(entry2Path, new Set([entry2Path, resolveCwd(utils2File)]))
-
-    const plugin = watch({}, resolvedFilesMap)
-
-    expect(plugin.name).toBe('watch')
-    expect(plugin.setup).toBeDefined()
+      writeFileSync(entryFile, 'export const hello = "updated"')
+      // Wait a bit to ensure rebuild is triggered
+      await new Promise(resolve => setTimeout(resolve, 200))
+      expect(spiedConsoleInfo).toHaveBeenCalledTimes(3)
+    })
   })
 })

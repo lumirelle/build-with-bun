@@ -40,8 +40,27 @@ describe('build', () => {
       expect(existsSync(oldFile)).toBe(false)
     })
 
-    it.todo('should generate dts files by default', async () => {
+    it('should generate dts files by default', async () => {
       const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('declare')
+      expect(dtsContent).toContain('hello')
+    })
+
+    it('should generate dts files and automatically detect root by default', async () => {
+      const srcDir = join(testDir, 'src')
+      mkdirSync(srcDir, { recursive: true })
+      const entryFile = join(srcDir, 'index.ts')
       writeFileSync(entryFile, 'export const hello = "world"')
 
       await build({
@@ -128,7 +147,7 @@ describe('build', () => {
       expect(existsSync(oldFile)).toBe(true)
     })
 
-    it.todo('should generate dts files when dts is true', async () => {
+    it('should generate dts files when dts is true', async () => {
       const entryFile = join(testDir, 'index.ts')
       writeFileSync(entryFile, 'export const hello = "world"')
 
@@ -140,10 +159,6 @@ describe('build', () => {
 
       const dtsFile = join(testOutDir, 'index.d.ts')
       expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('declare')
-      expect(dtsContent).toContain('hello')
     })
 
     it('should not generate dts files when dts is false', async () => {
@@ -201,9 +216,9 @@ describe('build', () => {
 
   describe('build behavior', () => {
     it('should found entrypoints based on cwd when they are relative paths', async () => {
-      const rootDir = join(testDir, 'src')
-      mkdirSync(rootDir, { recursive: true })
-      const entryFile = join(rootDir, 'index.ts')
+      const srcDir = join(testDir, 'src')
+      mkdirSync(srcDir, { recursive: true })
+      const entryFile = join(srcDir, 'index.ts')
       writeFileSync(entryFile, 'export const hello = "world"')
 
       expect(existsSync(entryFile)).toBe(true)
@@ -225,9 +240,9 @@ describe('build', () => {
     })
 
     it('should generate absolute entrypoints based on cwd correctly when they are relative paths', async () => {
-      const rootDir = join(testDir, 'src')
-      mkdirSync(rootDir, { recursive: true })
-      const entryFile = join(rootDir, 'index.ts')
+      const srcDir = join(testDir, 'src')
+      mkdirSync(srcDir, { recursive: true })
+      const entryFile = join(srcDir, 'index.ts')
       writeFileSync(entryFile, 'export const hello = "world"')
 
       const result = await $`
@@ -285,37 +300,21 @@ describe('build', () => {
       expect(output._pluginNames).toContain('dts')
     })
 
-    it.todo('should generate dts for all entrypoints', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
-
-      const output = await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: false,
-      })
-
-      expect(output.success).toBe(true)
-      expect(output.outputs.length).toBeGreaterThan(0)
-    })
-
-    it.todo('should resolve dependencies and generate dts for all entrypoints', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-      writeFileSync(utilsFile, 'export const foo = "bar"')
+    it('should generate dts for all entrypoints', async () => {
+      const entryFile1 = join(testDir, 'index.ts')
+      const entryFile2 = join(testDir, 'cli.ts')
+      writeFileSync(entryFile1, 'export const hello = "world"')
+      writeFileSync(entryFile2, 'export const cli = "command line interface"')
 
       await build({
-        entrypoints: [entryFile],
+        entrypoints: [entryFile1, entryFile2],
         outdir: testOutDir,
-        dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('foo')
+      const dtsFile1 = join(testOutDir, 'index.d.ts')
+      const dtsFile2 = join(testOutDir, 'cli.d.ts')
+      expect(existsSync(dtsFile1)).toBe(true)
+      expect(existsSync(dtsFile2)).toBe(true)
     })
 
     it('should using resolve plugin when watch is enabled', async () => {
@@ -373,8 +372,8 @@ describe('build', () => {
         },
       })
 
-      // Simulate a file change to trigger rebuild
       writeFileSync(entryFile, 'export const hello = "bun"')
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
       expect(rebuildCalled).toBeGreaterThan(1)
     })

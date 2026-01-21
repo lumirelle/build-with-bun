@@ -3,7 +3,6 @@
  */
 
 import type { BunPlugin } from 'bun'
-import type { ResolvedModuleMap } from './types.ts'
 import { dirname, resolve as pathResolve } from 'pathe'
 import { RE_RELATIVE } from './constants.ts'
 import { resolveCwd, tryResolveTs } from './utils.ts'
@@ -12,11 +11,10 @@ import { resolveCwd, tryResolveTs } from './utils.ts'
  * Resolve the dependent (relative) module paths of each entrypoint.
  *
  * @param entrypoints The entrypoints to resolve.
- * @param resolvedModuleMap The map to record the dependent (relative) module paths of each entrypoint.
+ * @param resolvedModules The set to store all resolved module paths.
  */
 export function resolve(
   entrypoints: string[],
-  resolvedModuleMap: ResolvedModuleMap,
   resolvedModules: Set<string>,
 ): BunPlugin {
   /**
@@ -50,11 +48,6 @@ export function resolve(
     // Note: A file may be shared by multiple entrypoints, we keep the first mapping.
     if (!moduleToEntrypoint.has(resolvedPath))
       moduleToEntrypoint.set(resolvedPath, entrypoint)
-
-    // Add to the entrypoint's resolved files.
-    // If `entrypoint` exists, then `resolvedModuleMap.get(entrypoint)` is guaranteed to be a existing Set.
-    resolvedModuleMap.get(entrypoint)!.add(resolvedPath)
-
     resolvedModules.add(resolvedPath)
 
     return undefined
@@ -65,11 +58,10 @@ export function resolve(
     setup(builder) {
       builder.onStart(() => {
         moduleToEntrypoint.clear()
-        resolvedModuleMap.clear()
-        // Initialize each entrypoint with its own Set and map to itself.
+        resolvedModules.clear()
         for (const entrypoint of entrypoints) {
           moduleToEntrypoint.set(entrypoint, entrypoint)
-          resolvedModuleMap.set(entrypoint, new Set([entrypoint]))
+          resolvedModules.add(entrypoint)
         }
       })
 

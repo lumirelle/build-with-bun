@@ -1,6 +1,5 @@
 /* eslint-disable no-console */
 import type { BuildOutput } from 'bun'
-import type { ResolvedModuleMap } from './types.ts'
 import { existsSync, rmSync } from 'node:fs'
 import { styleText } from 'node:util'
 import { formatDuration, resolveCwd } from './utils.ts'
@@ -65,15 +64,13 @@ type BuildConfig = Bun.BuildConfig & {
    */
   clean?: boolean
   /**
-   * Generate .d.ts files for entrypoints (Using `oxc-transform`).
-   *
-   * TODO(Lumirelle): Support `splitting` option.
+   * Enable plugin to generate .d.ts files for entrypoints (Using `oxc-transform`).
    *
    * @default true
    */
   dts?: boolean
   /**
-   * Watch for file changes and rebuild automatically.
+   * Enable plugin to watch for file changes and rebuild automatically.
    *
    * @default false
    */
@@ -121,13 +118,9 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     rmSync(outdir, { recursive: true })
 
   /**
-   * Absolute entrypoint paths.
+   * Resolved entrypoint paths based on CWD.
    */
-  const absoluteEntrypoints = entrypoints.map(entry => resolveCwd(entry))
-  /**
-   * Map from entrypoint path to its dependent (relative) module paths. Resolved based on the root directory.
-   */
-  const resolvedModuleMap: ResolvedModuleMap = new Map<string, Set<string>>()
+  const resolvedEntrypoints = entrypoints.map(entry => resolveCwd(entry))
   /**
    * Set of paths for all resolved modules.
    */
@@ -135,8 +128,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
   if (dts || watch) {
     plugins.push((await import('./resolve.ts')).resolve(
-      absoluteEntrypoints,
-      resolvedModuleMap,
+      resolvedEntrypoints,
       resolvedModules,
     ))
   }
@@ -144,7 +136,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   if (dts) {
     plugins.push((await import('./dts.ts')).dts(
       root,
-      absoluteEntrypoints,
+      resolvedEntrypoints,
       resolvedModules,
     ))
   }
@@ -179,7 +171,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
           if (!silent)
             console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildCostTime))}`)
         },
-      }, resolvedModuleMap),
+      }, resolvedModules),
     )
   }
 
@@ -197,7 +189,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     // @ts-expect-error internal testing only
     output._packages = packages
     // @ts-expect-error internal testing only
-    output._absoluteEntrypoints = [...absoluteEntrypoints]
+    output._absoluteEntrypoints = [...resolvedEntrypoints]
     // @ts-expect-error internal testing only
     output._pluginNames = plugins.map(plugin => plugin.name)
   }
