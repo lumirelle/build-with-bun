@@ -83,13 +83,13 @@ type BuildConfig = Bun.BuildConfig & {
    */
   afterBuild?: (output: BuildOutput) => Promise<void> | void
   /**
-   * Suppress build output logs.
+   * Suppress build output logs. E.g., "Build completed in XXms".
    *
    * @default false
    */
   silent?: boolean
   /**
-   * Used for testing purposes only. When enabled, build will return some extra debug output.
+   * Used for testing purposes only. When enabled, build will return some extra debug output, and watch mode will not take effect.
    *
    * @internal
    */
