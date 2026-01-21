@@ -1,3 +1,7 @@
+/**
+ * @file A Bun build plugin to watch for file changes and trigger rebuilds.
+ */
+
 import type { BunPlugin } from 'bun'
 import fs from 'node:fs'
 

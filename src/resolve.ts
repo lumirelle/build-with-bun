@@ -1,5 +1,5 @@
 /**
- * @file A bun build plugin to record dependent (relative) module paths of each entrypoint.
+ * @file A Bun build plugin to record all resolved module paths from entrypoints.
  */
 
 import type { BunPlugin } from 'bun'

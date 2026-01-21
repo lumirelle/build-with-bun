@@ -1,3 +1,7 @@
+/**
+ * @file A Bun build plugin to generate `.d.ts` files for entrypoints using `oxc-transform` and `oxc-parser`.
+ */
+
 import type { BunPlugin } from 'bun'
 import { parseSync } from 'oxc-parser'
 import { isolatedDeclarationSync } from 'oxc-transform'
