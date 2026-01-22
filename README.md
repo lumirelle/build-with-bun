@@ -11,7 +11,10 @@ A utils for building JS/TS projects with bun.
 
 ## Todos
 
-- [ ] Support type imports/exports.
+- [ ] Support resolving path alias in `tsconfig.json`.
+- [ ] Correctly handle dts content generation for entrypoints.
+- [ ] Avoid missing rebuild if file changes happens during ongoing rebuild.
+- [ ] Safely close watchers on exit.
 - [ ] ...
 
 ## Sponsors
