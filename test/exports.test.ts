@@ -28,7 +28,7 @@ describe.todoIf(version === '0.0.0')('exports-snapshot', async () => {
         const output = join(root, 'test', 'exports', ...pkgPaths)
         await fs.mkdir(dirname(output), { recursive: true })
         await fs.writeFile(output, exports)
-        expect(exports).toEqual(await fs.readFile(output, { encoding: 'utf-8' }))
+        expect(exports).toEqual(await Bun.file(output).text())
       })
     }
   }

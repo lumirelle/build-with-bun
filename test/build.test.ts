@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative } from 'pathe'
 import { build } from '../src/build.ts'
 import { cwd, resolveCwd } from '../src/utils.ts'
@@ -316,7 +316,7 @@ describe('build', () => {
 
       const jsFile = join(testOutDir, 'index.js')
       expect(existsSync(jsFile)).toBe(true)
-      const jsContent = readFileSync(jsFile, 'utf-8')
+      const jsContent = await Bun.file(jsFile).text()
       expect(jsContent).toMatchInlineSnapshot(`
         "// .temp/build-with-bun-test/src/index.ts
         var hello = "world";
