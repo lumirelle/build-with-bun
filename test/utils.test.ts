@@ -338,7 +338,7 @@ describe('utils', () => {
             'new-projects/src/utils/helpers.ts',
           ]
       expect(extractCommonAncestor(paths)).toBe(
-        process.platform === 'win32' ? 'C:/Users' : '/home/auser',
+        process.platform === 'win32' ? 'C:/Users' : '/home',
       )
     })
   })
