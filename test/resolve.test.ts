@@ -42,6 +42,7 @@ describe('resolve', () => {
     const resolvedEntry = resolveCwd(entryFile)
     const resolvedUtils = resolveCwd(utilsFile)
     const entrypointPaths = [resolvedEntry]
+    console.error(`Entrypoints: ${entrypointPaths.join(', ')}`)
 
     await build({
       entrypoints: [entryFile],
