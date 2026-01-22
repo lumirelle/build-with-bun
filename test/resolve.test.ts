@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'pathe'
+import { join, normalize, resolve as pathResolve } from 'pathe'
 import { build } from '../src/build.ts'
 import { resolve } from '../src/resolve.ts'
 import { resolveCwd } from '../src/utils.ts'
@@ -13,6 +13,12 @@ describe('resolve', () => {
   beforeEach(() => {
     mkdirSync(testDir, { recursive: true })
     resolvedModules.clear()
+  })
+
+  it('should pathe resolve cwd', () => {
+    const path = '/var/folders/kg/7q73ww8s3llgyl61c9z_j5g40000gn/T/resolve-test/index.ts'
+    expect(normalize(path)).toBe(path)
+    expect(pathResolve('/Users/runner/work/build-with-bun/build-with-bun/', path)).toBe(path)
   })
 
   it('should add entrypoints to resolvedModules on start', async () => {
