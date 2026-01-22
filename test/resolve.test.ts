@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { build } from '../src/build.ts'
 import { resolve } from '../src/resolve.ts'
 import { resolveCwd } from '../src/utils.ts'
 
 describe('resolve', () => {
-  const testDir = join(tmpdir(), 'resolve-test')
+  const testDir = resolveCwd(join('.temp', 'resolve-test'))
   const resolvedModules = new Set<string>()
 
   beforeEach(() => {

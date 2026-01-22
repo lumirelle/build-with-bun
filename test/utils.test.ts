@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import process from 'node:process'
 import { dirname, join, normalize, resolve } from 'pathe'
 import { cwd, extractCommonAncestor, formatDuration, resolveCwd, tryResolveTs } from '../src/utils.ts'
@@ -64,7 +63,7 @@ describe('utils', () => {
   })
 
   describe('tryResolveTs', () => {
-    const testDir = join(tmpdir(), 'filename-test')
+    const testDir = resolveCwd(join('.temp', 'filename-test'))
 
     beforeEach(() => {
       if (existsSync(testDir))

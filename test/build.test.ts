@@ -1,13 +1,13 @@
 import { $ } from 'bun'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { dirname, join } from 'pathe'
 import { build } from '../src/build.ts'
 import { RE_TS } from '../src/constants.ts'
+import { resolveCwd } from '../src/utils.ts'
 
 describe('build', () => {
-  const testDir = join(tmpdir(), 'build-with-bun-test')
+  const testDir = resolveCwd(join('.temp', 'build-with-bun-test'))
   const testOutDir = join(testDir, 'dist')
 
   beforeEach(() => {

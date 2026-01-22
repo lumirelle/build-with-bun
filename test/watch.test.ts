@@ -1,12 +1,12 @@
 import type { mock } from 'bun:test'
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import { existsSync, watch as fsWatch, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { build } from '../src/build.ts'
+import { resolveCwd } from '../src/utils.ts'
 
 describe('watch', () => {
-  const testDir = join(tmpdir(), 'watch-test')
+  const testDir = resolveCwd(join('.temp', 'watch-test'))
   const testOutDir = join(testDir, 'dist')
   let spiedConsoleInfo: ReturnType<typeof mock<typeof console.info>>
 
