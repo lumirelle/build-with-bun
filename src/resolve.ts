@@ -28,7 +28,6 @@ export function resolve(
   const handleResolve = (args: { path: string, importer: string }): undefined => {
     if (!args.importer)
       return undefined
-    console.error(`Importer: ${args.importer}`)
     const importer = resolveCwd(args.importer)
 
     // Find which entrypoint this importer belongs to.
