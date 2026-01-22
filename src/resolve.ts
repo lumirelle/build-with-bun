@@ -28,13 +28,13 @@ export function resolve(
   const handleResolve = (args: { path: string, importer: string }): undefined => {
     if (!args.importer)
       return undefined
+    console.error(`Importer: ${args.importer}`)
     const importer = resolveCwd(args.importer)
 
     // Find which entrypoint this importer belongs to.
     const entrypoint = moduleToEntrypoint.get(importer)
     if (!entrypoint) {
       console.error(`Failed to find entrypoint for importer ${importer}, it looks like this file is not used by any entrypoints!`)
-      console.error(`All entrypoints: ${resolvedEntrypoints.join(', ')}`)
       return undefined
     }
 
