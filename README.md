@@ -14,6 +14,7 @@ A utils for building JS/TS projects with bun.
 - [x] Support resolving path alias in `tsconfig.json`.
 - [x] Correctly handle dts content generation for entrypoints.
 - [x] Use `obug` to provide debugging info.
+- [ ] Add test cases about generating dts for `files` option.
 - [ ] Avoid missing rebuild if file changes happens during ongoing rebuild.
 - [ ] Safely close watchers on exit.
 - [ ] Prompt user to enable `isolateModules` if not enabled.
