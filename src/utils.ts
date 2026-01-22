@@ -19,10 +19,6 @@ export function formatDuration(duration: number): string {
   return duration < 1000 ? `${duration.toFixed(2)}ms` : `${(duration / 1000).toFixed(2)}s`
 }
 
-export interface TryResolveTsOptions {
-  resolveIndex?: boolean
-}
-
 /**
  * Extract the common ancestor directory from a list of paths.
  *
