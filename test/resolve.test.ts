@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
 import { build } from '../src/build.ts'
 import { resolve } from '../src/resolve.ts'
 import { resolveCwd } from '../src/utils.ts'
