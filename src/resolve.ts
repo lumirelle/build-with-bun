@@ -34,6 +34,7 @@ export function resolve(
     const entrypoint = moduleToEntrypoint.get(importer)
     if (!entrypoint) {
       console.error(`Failed to find entrypoint for importer ${importer}, it looks like this file is not used by any entrypoints!`)
+      console.error(`All entrypoints: ${resolvedEntrypoints.join(', ')}`)
       return undefined
     }
 
