@@ -29,10 +29,19 @@ export function watch(
   resolvedModules: Set<string>,
 ): BunPlugin {
   const { onRebuild, debounce = 50, test } = options
-  let rebuildFn: (() => Promise<void>) | null = null
   let debounceTimer: Timer | null = null
   let pending = false
+
   const watcherMap = new Map<string, fs.FSWatcher>()
+
+  const rebuildFn = async (): Promise<void> => {
+    // FIXME(Lumirelle): This may cause missed rebuilds if file changes happen during an ongoing rebuild.
+    if (pending)
+      return
+    pending = true
+    await onRebuild?.()
+    pending = false
+  }
 
   return {
     name: 'watch',
@@ -41,38 +50,33 @@ export function watch(
         if (test)
           return
 
-        rebuildFn = async (): Promise<void> => {
-          // FIXME(Lumirelle): This may cause missed rebuilds if file changes happen during an ongoing rebuild.
-          if (pending)
-            return
-          pending = true
-          await onRebuild?.()
-          pending = false
-        }
-
         // Clean up watchers for removed modules
         for (const module of watcherMap.keys()) {
           if (resolvedModules.has(module))
             continue
-          watcherMap.get(module)?.close()
-          watcherMap.delete(module)
+          if (watcherMap.has(module)) {
+            watcherMap.get(module)!.close()
+            watcherMap.delete(module)
+          }
         }
 
         // Set up watchers for new modules
         for (const filePath of resolvedModules) {
           if (watcherMap.has(filePath))
             continue
-          const watcher = fs.watch(filePath, { recursive: false }, (_, filename) => {
-            if (!filename) {
-              console.error(`Filename not provided for changed file: ${filePath}`)
-              return
-            }
-            if (debounceTimer)
-              clearTimeout(debounceTimer)
-            debounceTimer = setTimeout(() => {
-              rebuildFn?.()
-            }, debounce)
-          }).on('error', (error) => {
+          const watcher = fs.watch(
+            filePath,
+            { recursive: false },
+            (_, filename) => {
+              if (!filename)
+                return
+              if (debounceTimer)
+                clearTimeout(debounceTimer)
+              debounceTimer = setTimeout(() => {
+                rebuildFn()
+              }, debounce)
+            },
+          ).on('error', (error) => {
             console.error(`Watcher error for file ${filePath}:`, error)
           })
           watcherMap.set(filePath, watcher)

@@ -1,7 +1,5 @@
-import { existsSync } from 'node:fs'
 import process from 'node:process'
-import { dirname, normalize, relative, resolve } from 'pathe'
-import { RE_TS, TS_EXTENSIONS } from './constants'
+import { dirname, isAbsolute, normalize, relative, resolve } from 'pathe'
 
 export const cwd = normalize(process.cwd())
 
@@ -26,43 +24,9 @@ export interface TryResolveTsOptions {
 }
 
 /**
- * Try to resolve a path to a TypeScript file by adding extensions.
- * Returns the resolved path if found, or null if not found.
- */
-export function tryResolveTs(basePath: string, options: TryResolveTsOptions = {}): string | null {
-  const { resolveIndex = true } = options
-
-  // If already has a TS extension, check if it exists
-  if (RE_TS.test(basePath))
-    return existsSync(basePath) ? basePath : null
-
-  // Otherwise, try adding each extension
-  for (const ext of TS_EXTENSIONS) {
-    const pathWithExt = `${basePath}${ext}`
-    if (existsSync(pathWithExt))
-      return pathWithExt
-  }
-
-  // If not resolving index files, return null
-  if (!resolveIndex)
-    return null
-
-  // Otherwise, try index files
-  for (const ext of TS_EXTENSIONS) {
-    const indexPath = resolve(basePath, `index${ext}`)
-    if (existsSync(indexPath))
-      return indexPath
-  }
-
-  return null
-}
-
-/**
  * Extract the common ancestor directory from a list of paths.
  *
- * If all paths are based on the current working directory, the result is relative to it.
- *
- * Otherwise, the result is an absolute path.
+ * If any of the input paths is absolute, the result will be absolute.
  *
  * @param paths The list of paths.
  * @returns The common ancestor directory.
@@ -75,7 +39,7 @@ export function extractCommonAncestor(paths: string[]): string {
 
   const splitPaths = paths.map(p => resolveCwd(p).split('/'))
   const minLength = Math.min(...splitPaths.map(parts => parts.length))
-  const hasAnyNotBasedCwd = paths.some(p => relative(cwd, p).startsWith('..'))
+  const isAnyAbsolute = paths.some(p => isAbsolute(p))
   const commonParts: string[] = []
 
   for (let i = 0; i < minLength; i++) {
@@ -93,5 +57,5 @@ export function extractCommonAncestor(paths: string[]): string {
   else if (commonAncestor === '')
     return '/'
 
-  return hasAnyNotBasedCwd ? commonAncestor : relative(cwd, commonAncestor) || '.'
+  return isAnyAbsolute ? commonAncestor : relative(cwd, commonAncestor) || '.'
 }

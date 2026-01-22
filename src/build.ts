@@ -1,20 +1,88 @@
 /* eslint-disable no-console */
 import type { BuildOutput } from 'bun'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, rmSync, statSync } from 'node:fs'
 import { styleText } from 'node:util'
-import { formatDuration, resolveCwd, tryResolveTs } from './utils.ts'
+import { isAbsolute, normalize } from 'pathe'
+import { formatDuration, resolveCwd } from './utils.ts'
 
-type BuildConfig = Bun.BuildConfig & {
+export type BuildConfig = Bun.BuildConfig & {
   // Below are `Bun.BuildConfig` options with some modifications or clarifications
 
   /**
    * An array of paths corresponding to the entrypoints of our application. One bundle will be generated for each entrypoint.
    *
-   * Relative paths are resolved based on `CWD`.
+   * This can only accept file paths. Relative paths are resolved based on `CWD`.
+   *
+   * What's more, we does not automatically resolve file extensions for entrypoints.
+   *
+   * @example
+   * ```ts
+   * // If exists:
+   * // - (cwd)
+   * //   - /src
+   * //     - index.ts
+   * //     - cli.ts
+   * // Valid entrypoints:
+   * [
+   *   './src/index.ts',
+   *   './src/cli.ts',
+   * ]
+   * // Invalid entrypoints:
+   * [
+   *  './src/index',      // Missing file extension
+   *  './src',            // Directory path
+   *  './src/missing.ts', // Non-existing file
+   * ]
+   * ```
+   *
+   * @example
+   * ```ts
+   * // If exists:
+   * // - (cwd)
+   * //   - /lib
+   * //     - main.jsx
+   * //     - helper    // No extension file
+   * // Valid entrypoints:
+   * [
+   *   './lib/main.jsx',
+   *   './lib/helper',
+   * ]
+   * ```
    */
   entrypoints: Bun.BuildConfig['entrypoints']
   /**
    * The root directory of the project.
+   *
+   * This affects how output `.js` & `.d.ts` files are structured in `outdir`.
+   *
+   * @example
+   * ```ts
+   * // If we set:
+   * {
+   *   entrypoints: ['./src/index.ts'],
+   *   root: './src'
+   *   outdir: './dist'
+   * }
+   * // The output file will be:
+   * // - (cwd)
+   * //   - /dist
+   * //     - index.js
+   * ```
+   *
+   * @example
+   * ```ts
+   * // If we set:
+   * {
+   *   entrypoints: ['./src/index.ts'],
+   *   root: './'
+   *   outdir: './dist'
+   * }
+   * // The output file will be:
+   * // - (cwd)
+   * //   - /dist
+   * //     - /src
+   * //       - index.js
+   * ```
    *
    * @default The common ancestor directory of all entrypoints
    * @see https://bun.com/docs/bundler#root
@@ -24,6 +92,8 @@ type BuildConfig = Bun.BuildConfig & {
    * The directory where output files will be written.
    *
    * If outdir is not passed to the JavaScript API, bundled code will not be written to disk. Bundled files are returned in an array of BuildArtifact objects. These objects are Blobs with extra properties; see Outputs for complete documentation.
+   *
+   * Also, `dts` plugin will not work without `outdir` specified.
    *
    * @see https://bun.com/docs/bundler#outdir
    * @see https://bun.com/docs/bundler#outputs
@@ -42,7 +112,7 @@ type BuildConfig = Bun.BuildConfig & {
    *
    * `true` and `false` are aliases for `"inline"` and `"none"`, respectively.
    *
-   * @default "none" or "external" if `watch` is `true`
+   * @default "none", or "external" when `watch` is `true`
    * @see {@link outdir} required for `"linked"` maps
    * @see {@link publicPath} to customize the base url of linked source maps
    */
@@ -58,19 +128,19 @@ type BuildConfig = Bun.BuildConfig & {
   // Below is additional options
 
   /**
-   * Clean the output directory before building.
+   * Clean `outdir` before building.
    *
    * @default true
    */
   clean?: boolean
   /**
-   * Enable plugin to generate .d.ts files for entrypoints (Using `oxc-transform`).
+   * Enable plugin to generate isolated declaration for each resolved TypeScript module (Using `oxc-transform`).
    *
    * @default true
    */
   dts?: boolean
   /**
-   * Enable plugin to watch for file changes and rebuild automatically.
+   * Enable plugin to watch for source file changes and rebuild automatically.
    *
    * @default false
    */
@@ -86,13 +156,19 @@ type BuildConfig = Bun.BuildConfig & {
    */
   silent?: boolean
   /**
-   * Used for testing purposes only. When enabled, build will return some extra debug output, and watch mode will not take effect.
+   * Used for testing purposes only. When enabled, build function will return some extra debug data, and watch mode will not take effect.
    *
    * @internal
    */
   test?: boolean
 }
 
+/**
+ * Build the project with given configuration using Bun.
+ *
+ * @param config Build configuration
+ * @returns Build output
+ */
 export async function build(config: BuildConfig): Promise<BuildOutput> {
   const startTime = performance.now()
 
@@ -114,22 +190,22 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     ...rest
   } = config
 
-  if (clean && outdir && existsSync(outdir))
+  // Validate entrypoints, entrypoints must be files with extensions
+  for (const entry of entrypoints) {
+    if (!existsSync(entry) || statSync(entry).isDirectory())
+      throw new Error(`Entrypoint file not found: ${entry}`)
+  }
+
+  if (outdir && clean && existsSync(outdir))
     rmSync(outdir, { recursive: true })
 
   /**
    * Resolved entrypoint paths based on CWD.
-   *
-   * If the entrypoint is a file without extension, we will try to resolve the file with extensions `.ts`, `.tsx`, `.mts`, `.cts`.
-   * We don't resolve index files for entrypoints as `Bun.build` does not support directory entrypoints.
    */
   const resolvedEntrypoints = entrypoints.map(
-    entry => tryResolveTs(
-      resolveCwd(entry),
-      { resolveIndex: false },
-    ),
+    // Check if entry is absolute path first, save some microseconds
+    entry => isAbsolute(entry) ? normalize(entry) : resolveCwd(entry),
   )
-    .filter(Boolean) as string[]
   /**
    * Set of paths for all resolved modules.
    */
@@ -166,7 +242,6 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
   if (watch) {
     plugins.push(
       (await import('./watch.ts')).watch({
-        test,
         onRebuild: async () => {
           const rebuildStartTime = performance.now()
           if (!silent)
@@ -180,6 +255,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
           if (!silent)
             console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildCostTime))}`)
         },
+        test,
       }, resolvedModules),
     )
   }
@@ -198,7 +274,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     // @ts-expect-error internal testing only
     output._packages = packages
     // @ts-expect-error internal testing only
-    output._absoluteEntrypoints = [...resolvedEntrypoints]
+    output._resolvedEntrypoints = [...resolvedEntrypoints]
     // @ts-expect-error internal testing only
     output._pluginNames = plugins.map(plugin => plugin.name)
   }

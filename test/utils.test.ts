@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { describe, expect, it } from 'bun:test'
 import process from 'node:process'
-import { dirname, join, normalize, resolve } from 'pathe'
-import { cwd, extractCommonAncestor, formatDuration, resolveCwd, tryResolveTs } from '../src/utils.ts'
+import { dirname, normalize, resolve } from 'pathe'
+import { cwd, extractCommonAncestor, formatDuration, resolveCwd } from '../src/utils.ts'
 
 describe('utils', () => {
   describe('cwd', () => {
@@ -62,160 +61,6 @@ describe('utils', () => {
     })
   })
 
-  describe('tryResolveTs', () => {
-    const testDir = resolveCwd(join('.temp', 'filename-test'))
-
-    beforeEach(() => {
-      if (existsSync(testDir))
-        rmSync(testDir, { recursive: true, force: true })
-      mkdirSync(testDir, { recursive: true })
-    })
-
-    afterEach(() => {
-      if (existsSync(testDir))
-        rmSync(testDir, { recursive: true, force: true })
-    })
-
-    it('should resolve existing .ts file with extension', () => {
-      const filePath = join(testDir, 'file.ts')
-      writeFileSync(filePath, 'export const foo = 1')
-
-      expect(tryResolveTs(filePath)).toBe(filePath)
-    })
-
-    it('should resolve existing .tsx file with extension', () => {
-      const filePath = join(testDir, 'Component.tsx')
-      writeFileSync(filePath, 'export const Component = "test"')
-
-      expect(tryResolveTs(filePath)).toBe(filePath)
-    })
-
-    it('should resolve existing .mts file with extension', () => {
-      const filePath = join(testDir, 'module.mts')
-      writeFileSync(filePath, 'export const mod = 1')
-
-      expect(tryResolveTs(filePath)).toBe(filePath)
-    })
-
-    it('should resolve existing .cts file with extension', () => {
-      const filePath = join(testDir, 'module.cts')
-      writeFileSync(filePath, 'export const mod = 1')
-
-      expect(tryResolveTs(filePath)).toBe(filePath)
-    })
-
-    it('should return null for non-existing file with extension', () => {
-      const filePath = join(testDir, 'nonexistent.ts')
-
-      expect(tryResolveTs(filePath)).toBeNull()
-    })
-
-    it('should resolve .ts file without extension', () => {
-      const filePath = join(testDir, 'file.ts')
-      writeFileSync(filePath, 'export const foo = 1')
-
-      const basePath = join(testDir, 'file')
-      expect(tryResolveTs(basePath)).toBe(filePath)
-    })
-
-    it('should resolve .tsx file without extension', () => {
-      const filePath = join(testDir, 'Component.tsx')
-      writeFileSync(filePath, 'export const Component = "test"')
-
-      const basePath = join(testDir, 'Component')
-      expect(tryResolveTs(basePath)).toBe(filePath)
-    })
-
-    it('should resolve .mts file without extension', () => {
-      const filePath = join(testDir, 'module.mts')
-      writeFileSync(filePath, 'export const mod = 1')
-
-      const basePath = join(testDir, 'module')
-      expect(tryResolveTs(basePath)).toBe(filePath)
-    })
-
-    it('should resolve .cts file without extension', () => {
-      const filePath = join(testDir, 'module.cts')
-      writeFileSync(filePath, 'export const mod = 1')
-
-      const basePath = join(testDir, 'module')
-      expect(tryResolveTs(basePath)).toBe(filePath)
-    })
-
-    it('should resolve index.ts in directory', () => {
-      const subDir = join(testDir, 'subdir')
-      mkdirSync(subDir, { recursive: true })
-      const indexPath = join(subDir, 'index.ts')
-      writeFileSync(indexPath, 'export const index = 1')
-
-      expect(tryResolveTs(subDir)).toBe(indexPath)
-    })
-
-    it('should resolve index.tsx in directory', () => {
-      const subDir = join(testDir, 'components')
-      mkdirSync(subDir, { recursive: true })
-      const indexPath = join(subDir, 'index.tsx')
-      writeFileSync(indexPath, 'export const Index = "component"')
-
-      expect(tryResolveTs(subDir)).toBe(indexPath)
-    })
-
-    it('should resolve index.mts in directory', () => {
-      const subDir = join(testDir, 'modules')
-      mkdirSync(subDir, { recursive: true })
-      const indexPath = join(subDir, 'index.mts')
-      writeFileSync(indexPath, 'export const mod = 1')
-
-      expect(tryResolveTs(subDir)).toBe(indexPath)
-    })
-
-    it('should resolve index.cts in directory', () => {
-      const subDir = join(testDir, 'commonjs-modules')
-      mkdirSync(subDir, { recursive: true })
-      const indexPath = join(subDir, 'index.cts')
-      writeFileSync(indexPath, 'export const mod = 1')
-
-      expect(tryResolveTs(subDir)).toBe(indexPath)
-    })
-
-    it('should not resolve index file when resolveIndex is false', () => {
-      const subDir = join(testDir, 'commonjs-modules')
-      mkdirSync(subDir, { recursive: true })
-      const indexPath = join(subDir, 'index.ts')
-      writeFileSync(indexPath, 'export const mod = 1')
-
-      expect(tryResolveTs(subDir, { resolveIndex: false })).toBeNull()
-    })
-
-    it('should return null for non-existing path without extension', () => {
-      const basePath = join(testDir, 'nonexistent')
-
-      expect(tryResolveTs(basePath)).toBeNull()
-    })
-
-    it('should prefer .ts over .tsx when both exist', () => {
-      const tsPath = join(testDir, 'file.ts')
-      const tsxPath = join(testDir, 'file.tsx')
-      writeFileSync(tsPath, 'export const ts = 1')
-      writeFileSync(tsxPath, 'export const tsx = 1')
-
-      const basePath = join(testDir, 'file')
-      expect(tryResolveTs(basePath)).toBe(tsPath)
-    })
-
-    it('should prefer file with extension over index file in directory', () => {
-      const filePath = join(testDir, 'module.ts')
-      writeFileSync(filePath, 'export const mod = 1')
-
-      const subDir = join(testDir, 'module')
-      mkdirSync(subDir, { recursive: true })
-      const indexPath = join(subDir, 'index.ts')
-      writeFileSync(indexPath, 'export const indexMod = 1')
-
-      expect(tryResolveTs(join(testDir, 'module'))).toBe(filePath)
-    })
-  })
-
   describe('extractCommonAncestor', () => {
     it('should return "." for empty path list', () => {
       expect(extractCommonAncestor([])).toBe('.')
@@ -249,7 +94,7 @@ describe('utils', () => {
         `${cwd}/project/src/utils/helpers.ts`,
         `${cwd}/project/src/components/Button.tsx`,
       ]
-      expect(extractCommonAncestor(paths)).toBe('project/src')
+      expect(extractCommonAncestor(paths)).toBe(`${cwd}/project/src`)
     })
 
     it('should return relative common ancestor for multiple relative paths', () => {
@@ -306,7 +151,7 @@ describe('utils', () => {
         `${cwd}/project/src/utils/helpers.ts`,
         `${cwd}/project/README.md`,
       ]
-      expect(extractCommonAncestor(paths)).toBe('project')
+      expect(extractCommonAncestor(paths)).toBe(`${cwd}/project`)
     })
 
     it('should handle relative paths with different depths', () => {
@@ -323,7 +168,7 @@ describe('utils', () => {
         `${cwd}/project/src/index.ts`,
         'project/src/utils/helpers.ts',
       ]
-      expect(extractCommonAncestor(paths)).toBe('project/src')
+      expect(extractCommonAncestor(paths)).toBe(`${cwd}/project/src`)
     })
 
     it('should handle mixed absolute (not based on cwd) and relative paths and return absolute path', async () => {

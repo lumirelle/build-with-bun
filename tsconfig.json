@@ -8,12 +8,11 @@
     "moduleDetection": "force",
     "useDefineForClassFields": true,
     "libReplacement": false,
-
     // Modules
     "module": "preserve",
     "moduleResolution": "bundler",
     "paths": {
-      // Add your path aliases here
+      "@test/*": ["./test/*"]
     },
     "resolveJsonModule": true,
     "types": [

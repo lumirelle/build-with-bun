@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'pathe'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
+import { join } from 'pathe'
 import { build } from '../src/build.ts'
-import { RE_TS } from '../src/constants.ts'
 import { resolveCwd } from '../src/utils.ts'
 
 describe('dts', () => {
@@ -10,21 +9,20 @@ describe('dts', () => {
   const testOutDir = join(testDir, 'dist')
 
   beforeEach(() => {
-    if (existsSync(testDir))
-      rmSync(testDir, { recursive: true, force: true })
     mkdirSync(testDir, { recursive: true })
-    mkdirSync(testOutDir, { recursive: true })
   })
 
   afterEach(() => {
     if (existsSync(testDir))
       rmSync(testDir, { recursive: true, force: true })
+    if (existsSync(testOutDir))
+      rmSync(testOutDir, { recursive: true, force: true })
   })
 
   describe('dts file generation', () => {
     it('should generate dts file for entrypoint if outdir is provided', async () => {
       const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
+      await Bun.write(entryFile, 'export const hello = "world"')
 
       await build({
         entrypoints: [entryFile],
@@ -35,12 +33,12 @@ describe('dts', () => {
       const dtsFile = join(testOutDir, 'index.d.ts')
       expect(existsSync(dtsFile)).toBe(true)
       const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const hello = "world";')
+      expect(dtsContent).toMatchInlineSnapshot(`"export declare const hello = "world";"`)
     })
 
     it('should not generate dts when outdir is not provided', async () => {
       const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
+      await Bun.write(entryFile, 'export const hello = "world"')
 
       await build({
         entrypoints: [entryFile],
@@ -56,7 +54,7 @@ describe('dts', () => {
       const srcDir = join(testDir, 'src')
       mkdirSync(srcDir, { recursive: true })
       const entryFile = join(srcDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
+      await Bun.write(entryFile, 'export const hello = "world"')
 
       await build({
         entrypoints: [entryFile],
@@ -67,7 +65,7 @@ describe('dts', () => {
       const dtsFile = join(testOutDir, 'index.d.ts')
       expect(existsSync(dtsFile)).toBe(true)
       const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const hello = "world";')
+      expect(dtsContent).toMatchInlineSnapshot(`"export declare const hello = "world";"`)
     })
 
     it('should generate dts file and output base on specified root', async () => {
@@ -75,7 +73,7 @@ describe('dts', () => {
       const srcDir = join(testDir, 'src')
       mkdirSync(srcDir, { recursive: true })
       const entryFile = join(srcDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
+      await Bun.write(entryFile, 'export const hello = "world"')
 
       await build({
         entrypoints: [entryFile],
@@ -87,45 +85,36 @@ describe('dts', () => {
       const dtsFile = join(testOutDir, 'src', 'index.d.ts')
       expect(existsSync(dtsFile)).toBe(true)
       const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const hello = "world";')
+      expect(dtsContent).toMatchInlineSnapshot(`"export declare const hello = "world";"`)
     })
 
-    it('should generate dts file for entrypoint without extension', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
+    it('should generate dts file for all entrypoints', async () => {
+      const entryFile1 = join(testDir, 'index.ts')
+      const entryFile2 = join(testDir, 'cli.ts')
+      await Bun.write(entryFile1, 'export const hello = "world"')
+      await Bun.write(entryFile2, 'export const cli = "command line interface"')
 
       await build({
-        entrypoints: [entryFile.replace(RE_TS, '')],
+        entrypoints: [entryFile1, entryFile2],
         outdir: testOutDir,
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const hello = "world";')
-    })
-
-    it('should not generate dts file for entrypoint without file name', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
-
-      await build({
-        // `Bun.build` does not support directory entrypoints, so this plugin also skips generating dts file for directory entrypoints.
-        entrypoints: [dirname(entryFile)],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(false)
+      const dtsFile1 = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile1)).toBe(true)
+      const dtsContent1 = await Bun.file(dtsFile1).text()
+      expect(dtsContent1).toMatchInlineSnapshot(`"export declare const hello = "world";"`)
+      const dtsFile2 = join(testOutDir, 'cli.d.ts')
+      expect(existsSync(dtsFile2)).toBe(true)
+      const dtsContent2 = await Bun.file(dtsFile2).text()
+      expect(dtsContent2).toMatchInlineSnapshot(`"export declare const cli = "command line interface";"`)
     })
   })
 
   describe('dts content generation', () => {
-    it('should handle entrypoint with empty dts content', async () => {
+    it('should generate empty dts file for entrypoint with empty content', async () => {
       const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, '// empty file')
+      await Bun.write(entryFile, '// empty file')
 
       await build({
         entrypoints: [entryFile],
@@ -135,14 +124,14 @@ describe('dts', () => {
 
       const dtsFile = join(testOutDir, 'index.d.ts')
       const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toBe('')
+      expect(dtsContent).toMatchInlineSnapshot(`""`)
     })
 
-    it('should merge exported dependencies into dts file', async () => {
+    it('should generate isolated dts file for each resolved module (export ts module)', async () => {
       const entryFile = join(testDir, 'index.ts')
       const utilsFile = join(testDir, 'utils.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-      writeFileSync(utilsFile, 'export const foo = "bar"')
+      await Bun.write(entryFile, 'export { foo } from "./utils.ts"')
+      await Bun.write(utilsFile, 'export const foo = "bar"')
 
       await build({
         entrypoints: [entryFile],
@@ -150,17 +139,21 @@ describe('dts', () => {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const foo = "bar";')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { foo } from "./utils.ts";"`)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`"export declare const foo = "bar";"`)
     })
 
-    it.todo('should merge exported dependencies without file extension into dts file', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils"')
-      writeFileSync(utilsFile, 'export const foo = "bar"')
+    it('should generate isolated dts file for each resolved module (export tsx module)', async () => {
+      const entryFile = join(testDir, 'index.tsx')
+      const componentFile = join(testDir, 'Component.tsx')
+      await Bun.write(entryFile, 'export { Component } from "./Component.tsx"')
+      await Bun.write(componentFile, 'export const Component = "tsx-component"')
 
       await build({
         entrypoints: [entryFile],
@@ -168,17 +161,21 @@ describe('dts', () => {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const foo = "bar";')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const componentDts = join(testOutDir, 'Component.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(componentDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const componentDtsContent = await Bun.file(componentDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { Component } from "./Component.tsx";"`)
+      expect(componentDtsContent).toMatchInlineSnapshot(`"export declare const Component = "tsx-component";"`)
     })
 
-    it('should include source path comments in dts if merged exported dependencies', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-      writeFileSync(utilsFile, 'export const foo = "bar"')
+    it('should generate isolated dts file for each resolved module (export mts module)', async () => {
+      const entryFile = join(testDir, 'index.mts')
+      const moduleFile = join(testDir, 'module.mts')
+      await Bun.write(entryFile, 'export { module } from "./module.mts"')
+      await Bun.write(moduleFile, 'export const module = "mts-module"')
 
       await build({
         entrypoints: [entryFile],
@@ -186,18 +183,21 @@ describe('dts', () => {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toMatch(/^\/\/ .+utils\.ts/)
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { module } from "./module.mts";"`)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "mts-module";"`)
     })
 
-    it('should handle multiple exported dependencies', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      const helperFile = join(testDir, 'helper.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts";\nexport { bar } from "./helper.ts";')
-      writeFileSync(utilsFile, 'export const foo = "bar"')
-      writeFileSync(helperFile, 'export const bar = "baz"')
+    it('should generate isolated dts file for each resolved module (export cts module)', async () => {
+      const entryFile = join(testDir, 'index.cts')
+      const moduleFile = join(testDir, 'module.cts')
+      await Bun.write(entryFile, 'export { module } from "./module.cts"')
+      await Bun.write(moduleFile, 'export const module = "cts-module"')
 
       await build({
         entrypoints: [entryFile],
@@ -205,101 +205,21 @@ describe('dts', () => {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const foo = "bar";')
-      expect(dtsContent).toContain('export declare const bar = "baz";')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { module } from "./module.cts";"`)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "cts-module";"`)
     })
 
-    it('should handle nested exported dependencies', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      const helperFile = join(testDir, 'helper.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-      writeFileSync(utilsFile, 'export { bar } from "./helper.ts"\nexport const foo = "bar"')
-      writeFileSync(helperFile, 'export const bar = "baz"')
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const foo = "bar";')
-      expect(dtsContent).toContain('export declare const bar = "baz";')
-    })
-
-    it('should handle non-relative exported dependencies', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts";\nexport * as nodeprocess from "node:process";')
-      writeFileSync(utilsFile, 'export const foo = "bar"')
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('export declare const foo = "bar";')
-      expect(dtsContent).toContain('export * as nodeprocess from "node:process";')
-    })
-  })
-
-  describe.todo('todo', () => {
-    it('should clean import statements from merged dts', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      const helperFile = join(testDir, 'helper.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-      writeFileSync(utilsFile, 'import { bar } from "./helper.ts"\nexport const foo = "bar"')
-      writeFileSync(helperFile, 'export const bar = "baz"')
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('foo')
-      expect(dtsContent).toContain('bar')
-      expect(dtsContent).not.toMatch(/from\s+['"]\.\/utils\.ts['"]/)
-      expect(dtsContent).not.toMatch(/from\s+['"]\.\/helper\.ts['"]/)
-    })
-
-    it('should handle importPath without leading dot', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const utilsFile = join(testDir, 'utils.ts')
-      writeFileSync(entryFile, 'export { foo } from "./utils.ts"')
-      writeFileSync(utilsFile, 'import type { Something } from "some-package"\nexport const foo = "bar"')
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-    })
-
-    it('should handle imports without file extension', async () => {
+    it('should generate isolated dts file for each resolved module (export ts module without file extension)', async () => {
       const entryFile = join(testDir, 'index.ts')
       const commandFile = join(testDir, 'command.ts')
-      writeFileSync(entryFile, 'export * as cmd from "./command"')
-      writeFileSync(commandFile, 'export const run = (): void => {}')
+      await Bun.write(entryFile, 'export * as cmd from "./command"')
+      await Bun.write(commandFile, 'export const run: () => void = () => {}')
 
       await build({
         entrypoints: [entryFile],
@@ -307,21 +227,22 @@ describe('dts', () => {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('run')
-      // Should not contain the import statement since it's merged
-      expect(dtsContent).not.toMatch(/from\s+['"]\.\/command['"]/)
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const commandDts = join(testOutDir, 'command.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(commandDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const commandDtsContent = await Bun.file(commandDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export * as cmd from "./command";"`)
+      expect(commandDtsContent).toMatchInlineSnapshot(`"export declare const run: () => void;"`)
     })
 
-    it('should handle tsx files without extension', async () => {
+    it('should generate isolated dts file for each resolved module (export tsx module without file extension)', async () => {
       const entryFile = join(testDir, 'index.ts')
       const componentFile = join(testDir, 'Component.tsx')
-      writeFileSync(entryFile, 'export { Component } from "./Component"')
+      await Bun.write(entryFile, 'export { Component } from "./Component"')
       // Use a simple tsx file without JSX to avoid needing react runtime
-      writeFileSync(componentFile, 'export const Component = "tsx-component"')
+      await Bun.write(componentFile, 'export const Component = "tsx-component"')
 
       await build({
         entrypoints: [entryFile],
@@ -329,30 +250,21 @@ describe('dts', () => {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('Component')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const componentDts = join(testOutDir, 'Component.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(componentDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const componentDtsContent = await Bun.file(componentDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { Component } from "./Component";"`)
+      expect(componentDtsContent).toMatchInlineSnapshot(`"export declare const Component = "tsx-component";"`)
     })
 
-    it('should only include used exports from dependencies', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const commandFile = join(testDir, 'command.ts')
-      // command.ts exports multiple things: run, stop, status
-      writeFileSync(commandFile, `
-export const run = (): void => {}
-export const stop = (): void => {}
-export const status = (): string => "running"
-export interface CommandOptions {
-  timeout: number
-  retries: number
-}
-`)
-      // index.ts only imports and re-exports 'run'
-      writeFileSync(entryFile, `import { run } from "./command"
-export { run }
-`)
+    it('should generate isolated dts file for each resolved module (export mts module without file extension)', async () => {
+      const entryFile = join(testDir, 'index.mts')
+      const moduleFile = join(testDir, 'module.mts')
+      await Bun.write(entryFile, 'export { module } from "./module"')
+      await Bun.write(moduleFile, 'export const module = "mts-module"')
 
       await build({
         entrypoints: [entryFile],
@@ -360,41 +272,21 @@ export { run }
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-
-      // Should contain 'run' since it's exported
-      expect(dtsContent).toContain('run')
-
-      // Should NOT contain 'stop', 'status', or 'CommandOptions' since they're not used
-      expect(dtsContent).not.toContain('stop')
-      expect(dtsContent).not.toContain('status')
-      expect(dtsContent).not.toContain('CommandOptions')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { module } from "./module";"`)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "mts-module";"`)
     })
 
-    it('should only include types that are actually re-exported', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const typesFile = join(testDir, 'types.ts')
-      // types.ts exports multiple interfaces
-      writeFileSync(typesFile, `
-export interface User {
-  id: number
-  name: string
-}
-export interface Post {
-  id: number
-  title: string
-}
-export interface Comment {
-  id: number
-  text: string
-}
-`)
-      // index.ts only re-exports User
-      writeFileSync(entryFile, `export type { User } from "./types"
-`)
+    it('should generate isolated dts file for each resolved module (export cts module without file extension)', async () => {
+      const entryFile = join(testDir, 'index.cts')
+      const moduleFile = join(testDir, 'module.cts')
+      await Bun.write(entryFile, 'export { module } from "./module"')
+      await Bun.write(moduleFile, 'export const module = "cts-module"')
 
       await build({
         entrypoints: [entryFile],
@@ -402,51 +294,23 @@ export interface Comment {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-
-      // Should contain User since it's re-exported
-      expect(dtsContent).toContain('User')
-
-      // Should NOT contain Post or Comment since they're not re-exported
-      expect(dtsContent).not.toContain('Post')
-      expect(dtsContent).not.toContain('Comment')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { module } from "./module";"`)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "cts-module";"`)
     })
 
-    it('should handle default export', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const configFile = join(testDir, 'config.ts')
-      writeFileSync(configFile, `
-const config = {
-  name: "app",
-  version: "1.0.0"
-}
-export default config
-`)
-      writeFileSync(entryFile, `import config from "./config"
-export { config }
-`)
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('config')
-    })
-
-    it('should handle renamed exports', async () => {
+    it('should generate isolated dts file for each resolved module (export multiple modules)', async () => {
       const entryFile = join(testDir, 'index.ts')
       const utilsFile = join(testDir, 'utils.ts')
-      writeFileSync(utilsFile, `export const internalName = "value"`)
-      writeFileSync(entryFile, `export { internalName as publicName } from "./utils"`)
+      const helperFile = join(testDir, 'helper.ts')
+      await Bun.write(entryFile, 'export { foo } from "./utils.ts";\nexport { bar } from "./helper.ts";')
+      await Bun.write(utilsFile, 'export const foo = "bar"')
+      await Bun.write(helperFile, 'export const bar = "baz"')
 
       await build({
         entrypoints: [entryFile],
@@ -454,24 +318,30 @@ export { config }
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      // Should contain the renamed export
-      expect(dtsContent).toContain('publicName')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      const helperDts = join(testOutDir, 'helper.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      expect(existsSync(helperDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      const helperDtsContent = await Bun.file(helperDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "export { foo } from "./utils.ts";
+        export { bar } from "./helper.ts";"
+      `)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`"export declare const foo = "bar";"`)
+      expect(helperDtsContent).toMatchInlineSnapshot(`"export declare const bar = "baz";"`)
     })
 
-    it('should handle function exports', async () => {
+    it('should generate isolated dts file for each resolved module (export nested modules)', async () => {
       const entryFile = join(testDir, 'index.ts')
-      const funcFile = join(testDir, 'func.ts')
-      writeFileSync(funcFile, `
-export function greet(name: string): string {
-  return "Hello " + name
-}
-export function unused(): void {}
-`)
-      writeFileSync(entryFile, `export { greet } from "./func"`)
+      const utilsFile = join(testDir, 'utils.ts')
+      const helperFile = join(testDir, 'helper.ts')
+      await Bun.write(entryFile, 'export { foo } from "./utils.ts"')
+      await Bun.write(utilsFile, 'export { bar } from "./helper.ts"\nexport const foo = "bar"')
+      await Bun.write(helperFile, 'export const bar = "baz"')
 
       await build({
         entrypoints: [entryFile],
@@ -479,32 +349,28 @@ export function unused(): void {}
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('greet')
-      expect(dtsContent).toContain('string')
-      // Should NOT contain unused function
-      expect(dtsContent).not.toContain('unused')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      const helperDts = join(testOutDir, 'helper.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      expect(existsSync(helperDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      const helperDtsContent = await Bun.file(helperDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`"export { foo } from "./utils.ts";"`)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`
+        "export { bar } from "./helper.ts";
+        export declare const foo = "bar";"
+      `)
+      expect(helperDtsContent).toMatchInlineSnapshot(`"export declare const bar = "baz";"`)
     })
 
-    it('should handle class exports', async () => {
+    it('should generate isolated dts file for each resolved module (export external module)', async () => {
       const entryFile = join(testDir, 'index.ts')
-      const classFile = join(testDir, 'MyClass.ts')
-      writeFileSync(classFile, `
-export class MyClass {
-  private value: number
-  constructor(value: number) {
-    this.value = value
-  }
-  getValue(): number {
-    return this.value
-  }
-}
-export class UnusedClass {}
-`)
-      writeFileSync(entryFile, `export { MyClass } from "./MyClass"`)
+      const utilsFile = join(testDir, 'utils.ts')
+      await Bun.write(entryFile, 'export { foo } from "./utils.ts";\nexport * as nodeprocess from "node:process";')
+      await Bun.write(utilsFile, 'export const foo = "bar"')
 
       await build({
         entrypoints: [entryFile],
@@ -512,29 +378,24 @@ export class UnusedClass {}
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('MyClass')
-      expect(dtsContent).toContain('getValue')
-      // Should NOT contain UnusedClass
-      expect(dtsContent).not.toContain('UnusedClass')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "export { foo } from "./utils.ts";
+        export * as nodeprocess from "node:process";"
+      `)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`"export declare const foo = "bar";"`)
     })
 
-    it('should handle enum exports', async () => {
+    it('should generate isolated dts file for each resolved module (import ts module)', async () => {
       const entryFile = join(testDir, 'index.ts')
-      const enumFile = join(testDir, 'enums.ts')
-      writeFileSync(enumFile, `
-export enum Status {
-  Active = "active",
-  Inactive = "inactive"
-}
-export enum UnusedEnum {
-  A, B
-}
-`)
-      writeFileSync(entryFile, `export { Status } from "./enums"`)
+      const utilsFile = join(testDir, 'utils.ts')
+      await Bun.write(entryFile, 'import { foo } from "./utils.ts"; export { foo }')
+      await Bun.write(utilsFile, 'export const foo = "bar"')
 
       await build({
         entrypoints: [entryFile],
@@ -542,24 +403,99 @@ export enum UnusedEnum {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('Status')
-      expect(dtsContent).toContain('Active')
-      // Should NOT contain UnusedEnum
-      expect(dtsContent).not.toContain('UnusedEnum')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { foo } from "./utils.ts";
+        export { foo };"
+      `)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`"export declare const foo = "bar";"`)
     })
 
-    it('should handle type alias exports', async () => {
+    it('should generate isolated dts file for each resolved module (import tsx module)', async () => {
+      const entryFile = join(testDir, 'index.tsx')
+      const componentFile = join(testDir, 'Component.tsx')
+      await Bun.write(entryFile, 'import { Component } from "./Component.tsx"; export { Component }')
+      await Bun.write(componentFile, 'export const Component = "tsx-component"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const componentDts = join(testOutDir, 'Component.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(componentDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const componentDtsContent = await Bun.file(componentDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { Component } from "./Component.tsx";
+        export { Component };"
+      `)
+      expect(componentDtsContent).toMatchInlineSnapshot(`"export declare const Component = "tsx-component";"`)
+    })
+
+    it('should generate isolated dts file for each resolved module (import mts module)', async () => {
+      const entryFile = join(testDir, 'index.mts')
+      const moduleFile = join(testDir, 'module.mts')
+      await Bun.write(entryFile, 'import { module } from "./module.mts"; export { module }')
+      await Bun.write(moduleFile, 'export const module = "mts-module"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { module } from "./module.mts";
+        export { module };"
+      `)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "mts-module";"`)
+    })
+
+    it('should generate isolated dts file for each resolved module (import cts module)', async () => {
+      const entryFile = join(testDir, 'index.cts')
+      const moduleFile = join(testDir, 'module.cts')
+      await Bun.write(entryFile, 'import { module } from "./module.cts"; export { module }')
+      await Bun.write(moduleFile, 'export const module = "cts-module"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { module } from "./module.cts";
+        export { module };"
+      `)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "cts-module";"`)
+    })
+
+    it('should generate isolated dts file for each resolved module (import ts module with file extension)', async () => {
       const entryFile = join(testDir, 'index.ts')
-      const typesFile = join(testDir, 'types.ts')
-      writeFileSync(typesFile, `
-export type ID = string | number
-export type UnusedType = boolean
-`)
-      writeFileSync(entryFile, `export type { ID } from "./types"`)
+      const utilsFile = join(testDir, 'utils.ts')
+      await Bun.write(entryFile, 'import { foo } from "./utils.ts"; export { foo }')
+      await Bun.write(utilsFile, 'export const foo = "bar"')
 
       await build({
         entrypoints: [entryFile],
@@ -567,28 +503,101 @@ export type UnusedType = boolean
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('ID')
-      // Should NOT contain UnusedType
-      expect(dtsContent).not.toContain('UnusedType')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { foo } from "./utils.ts";
+        export { foo };"
+      `)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`"export declare const foo = "bar";"`)
     })
 
-    it('should handle interface that extends another interface', async () => {
+    it('should generate isolated dts file for each resolved module (import tsx module without file extension)', async () => {
+      const entryFile = join(testDir, 'index.tsx')
+      const componentFile = join(testDir, 'Component.tsx')
+      await Bun.write(entryFile, 'import { Component } from "./Component"; export { Component }')
+      await Bun.write(componentFile, 'export const Component = "tsx-component"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const componentDts = join(testOutDir, 'Component.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(componentDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const componentDtsContent = await Bun.file(componentDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { Component } from "./Component";
+        export { Component };"
+      `)
+      expect(componentDtsContent).toMatchInlineSnapshot(`"export declare const Component = "tsx-component";"`)
+    })
+
+    it('should generate isolated dts file for each resolved module (import mts module without file extension)', async () => {
+      const entryFile = join(testDir, 'index.mts')
+      const moduleFile = join(testDir, 'module.mts')
+      await Bun.write(entryFile, 'import { module } from "./module"; export { module }')
+      await Bun.write(moduleFile, 'export const module = "mts-module"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { module } from "./module";
+        export { module };"
+      `)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "mts-module";"`)
+    })
+
+    it('should generate isolated dts file for each resolved module (import cts module without file extension)', async () => {
+      const entryFile = join(testDir, 'index.cts')
+      const moduleFile = join(testDir, 'module.cts')
+      await Bun.write(entryFile, 'import { module } from "./module"; export { module }')
+      await Bun.write(moduleFile, 'export const module = "cts-module"')
+
+      await build({
+        entrypoints: [entryFile],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const moduleDts = join(testOutDir, 'module.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(moduleDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const moduleDtsContent = await Bun.file(moduleDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { module } from "./module";
+        export { module };"
+      `)
+      expect(moduleDtsContent).toMatchInlineSnapshot(`"export declare const module = "cts-module";"`)
+    })
+
+    it('should generate isolated dts file for each resolved module (import multiple modules)', async () => {
       const entryFile = join(testDir, 'index.ts')
-      const typesFile = join(testDir, 'types.ts')
-      writeFileSync(typesFile, `
-export interface Base {
-  id: number
-}
-export interface Extended extends Base {
-  name: string
-}
-`)
-      // Only export Extended, but Base should be included as it's referenced
-      writeFileSync(entryFile, `export type { Extended } from "./types"`)
+      const utilsFile = join(testDir, 'utils.ts')
+      const helperFile = join(testDir, 'helper.ts')
+      await Bun.write(entryFile, 'import { foo } from "./utils.ts"; import { bar } from "./helper.ts"; export { foo, bar }')
+      await Bun.write(utilsFile, 'export const foo = "bar"')
+      await Bun.write(helperFile, 'export const bar = "baz"')
 
       await build({
         entrypoints: [entryFile],
@@ -596,33 +605,31 @@ export interface Extended extends Base {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('Extended')
-    // Base is a dependency of Extended, but current implementation may not include it
-    // This is acceptable as TypeScript will resolve it when the types are used
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      const helperDts = join(testOutDir, 'helper.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      expect(existsSync(helperDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      const helperDtsContent = await Bun.file(helperDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { foo } from "./utils.ts";
+        import { bar } from "./helper.ts";
+        export { foo, bar };"
+      `)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`"export declare const foo = "bar";"`)
+      expect(helperDtsContent).toMatchInlineSnapshot(`"export declare const bar = "baz";"`)
     })
 
-    it('should handle type that references another type', async () => {
+    it('should generate isolated dts file for each resolved module (import nested modules)', async () => {
       const entryFile = join(testDir, 'index.ts')
-      const typesFile = join(testDir, 'types.ts')
-      writeFileSync(typesFile, `
-export interface User {
-  id: number
-  name: string
-}
-export interface Config {
-  user: User
-  enabled: boolean
-}
-export interface Unused {
-  value: string
-}
-`)
-      // Export Config which references User
-      writeFileSync(entryFile, `export type { Config } from "./types"`)
+      const utilsFile = join(testDir, 'utils.ts')
+      const helperFile = join(testDir, 'helper.ts')
+      await Bun.write(entryFile, 'import { foo } from "./utils.ts"; import { bar } from "./helper.ts"; export { foo, bar }')
+      await Bun.write(utilsFile, 'export { bar } from "./helper.ts"\nexport const foo = "bar"')
+      await Bun.write(helperFile, 'export const bar = "baz"')
 
       await build({
         entrypoints: [entryFile],
@@ -630,26 +637,30 @@ export interface Unused {
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('Config')
-      // Should NOT contain Unused
-      expect(dtsContent).not.toContain('Unused')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      const utilsDts = join(testOutDir, 'utils.d.ts')
+      const helperDts = join(testOutDir, 'helper.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      expect(existsSync(utilsDts)).toBe(true)
+      expect(existsSync(helperDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      const utilsDtsContent = await Bun.file(utilsDts).text()
+      const helperDtsContent = await Bun.file(helperDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import { foo } from "./utils.ts";
+        import { bar } from "./helper.ts";
+        export { foo, bar };"
+      `)
+      expect(utilsDtsContent).toMatchInlineSnapshot(`
+        "export { bar } from "./helper.ts";
+        export declare const foo = "bar";"
+      `)
+      expect(helperDtsContent).toMatchInlineSnapshot(`"export declare const bar = "baz";"`)
     })
 
-    it('should handle generic type exports', async () => {
+    it('should generate isolated dts file for each resolved module (import external module)', async () => {
       const entryFile = join(testDir, 'index.ts')
-      const typesFile = join(testDir, 'types.ts')
-      writeFileSync(typesFile, `
-export interface Result<T> {
-  data: T
-  error: string | null
-}
-export type AsyncResult<T> = Promise<Result<T>>
-`)
-      writeFileSync(entryFile, `export type { Result, AsyncResult } from "./types"`)
+      await Bun.write(entryFile, 'import * as fs from "node:fs"; export { fs }')
 
       await build({
         entrypoints: [entryFile],
@@ -657,135 +668,13 @@ export type AsyncResult<T> = Promise<Result<T>>
         dts: true,
       })
 
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('Result')
-      expect(dtsContent).toContain('AsyncResult')
-      expect(dtsContent).toContain('<T>')
-    })
-
-    it('should handle mixed value and type exports', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const moduleFile = join(testDir, 'module.ts')
-      writeFileSync(moduleFile, `
-export interface Options {
-  timeout: number
-}
-export const DEFAULT_OPTIONS: Options = { timeout: 1000 }
-export function configure(opts: Options): void {}
-`)
-      writeFileSync(entryFile, `
-export type { Options } from "./module"
-export { DEFAULT_OPTIONS, configure } from "./module"
-`)
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('Options')
-      expect(dtsContent).toContain('DEFAULT_OPTIONS')
-      expect(dtsContent).toContain('configure')
-    })
-
-    it('should handle deep transitive dependencies', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      const aFile = join(testDir, 'a.ts')
-      const bFile = join(testDir, 'b.ts')
-      const cFile = join(testDir, 'c.ts')
-      // c.ts is the deepest dependency
-      writeFileSync(cFile, `export const deepValue = "deep"`)
-      // b.ts imports from c
-      writeFileSync(bFile, `export { deepValue } from "./c"`)
-      // a.ts imports from b
-      writeFileSync(aFile, `export { deepValue } from "./b"`)
-      // entry imports from a
-      writeFileSync(entryFile, `export { deepValue } from "./a"`)
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('deepValue')
-      // Should not have any relative imports
-      expect(dtsContent).not.toMatch(/from\s+['"]\.\//)
-    })
-
-    it('should handle export with inline declaration', async () => {
-      const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, `
-export const VERSION = "1.0.0"
-export interface AppConfig {
-  name: string
-  debug: boolean
-}
-export function init(config: AppConfig): void {}
-export class App {
-  constructor(public config: AppConfig) {}
-}
-`)
-
-      await build({
-        entrypoints: [entryFile],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dtsFile = join(testOutDir, 'index.d.ts')
-      expect(existsSync(dtsFile)).toBe(true)
-
-      const dtsContent = await Bun.file(dtsFile).text()
-      expect(dtsContent).toContain('VERSION')
-      expect(dtsContent).toContain('AppConfig')
-      expect(dtsContent).toContain('init')
-      expect(dtsContent).toContain('App')
-    })
-
-    it('should generate separate dts for multiple entrypoints', async () => {
-      const entry1File = join(testDir, 'entry1.ts')
-      const entry2File = join(testDir, 'entry2.ts')
-      const utils1File = join(testDir, 'utils1.ts')
-      const utils2File = join(testDir, 'utils2.ts')
-      writeFileSync(entry1File, 'export { foo } from "./utils1.ts"')
-      writeFileSync(entry2File, 'export { bar } from "./utils2.ts"')
-      writeFileSync(utils1File, 'export const foo = "foo"')
-      writeFileSync(utils2File, 'export const bar = "bar"')
-
-      await build({
-        entrypoints: [entry1File, entry2File],
-        outdir: testOutDir,
-        dts: true,
-      })
-
-      const dts1File = join(testOutDir, 'entry1.d.ts')
-      const dts2File = join(testOutDir, 'entry2.d.ts')
-      expect(existsSync(dts1File)).toBe(true)
-      expect(existsSync(dts2File)).toBe(true)
-
-      const dts1Content = await Bun.file(dts1File).text()
-      const dts2Content = await Bun.file(dts2File).text()
-
-      // entry1.d.ts should only contain foo, not bar
-      expect(dts1Content).toContain('foo')
-      expect(dts1Content).not.toContain('bar')
-
-      // entry2.d.ts should only contain bar, not foo
-      expect(dts2Content).toContain('bar')
-      expect(dts2Content).not.toContain('foo')
+      const entryDts = join(testOutDir, 'index.d.ts')
+      expect(existsSync(entryDts)).toBe(true)
+      const entryDtsContent = await Bun.file(entryDts).text()
+      expect(entryDtsContent).toMatchInlineSnapshot(`
+        "import * as fs from "node:fs";
+        export { fs };"
+      `)
     })
   })
 })

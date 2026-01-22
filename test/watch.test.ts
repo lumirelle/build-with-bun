@@ -1,6 +1,6 @@
 import type { mock } from 'bun:test'
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
-import { existsSync, watch as fsWatch, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, watch as fsWatch, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'pathe'
 import { build } from '../src/build.ts'
 import { resolveCwd } from '../src/utils.ts'
@@ -26,7 +26,7 @@ describe('watch', () => {
   describe('fs watch', () => {
     it('should watch file changes and trigger callback', async () => {
       const filePath = join(testDir, 'file.txt')
-      writeFileSync(filePath, 'initial content')
+      await Bun.write(filePath, 'initial content')
 
       let callbackCalled = false
       const watcher = fsWatch(filePath, () => {
@@ -34,7 +34,7 @@ describe('watch', () => {
       })
 
       // Simulate file change
-      writeFileSync(filePath, 'updated content')
+      await Bun.write(filePath, 'updated content')
       // Wait a bit to ensure watcher picks up the change
       await new Promise(resolve => setTimeout(resolve, 100))
 
@@ -46,7 +46,7 @@ describe('watch', () => {
   describe('watch plugin', () => {
     it('should call onRebuild when file changes', async () => {
       const entryFile = join(testDir, 'index.ts')
-      writeFileSync(entryFile, 'export const hello = "world"')
+      await Bun.write(entryFile, 'export const hello = "world"')
 
       await build({
         entrypoints: [entryFile],
@@ -57,7 +57,7 @@ describe('watch', () => {
 
       expect(spiedConsoleInfo).toHaveBeenCalledTimes(1)
 
-      writeFileSync(entryFile, 'export const hello = "updated"')
+      await Bun.write(entryFile, 'export const hello = "updated"')
       // Wait a bit to ensure rebuild is triggered
       await new Promise(resolve => setTimeout(resolve, 200))
       expect(spiedConsoleInfo).toHaveBeenCalledTimes(3)
