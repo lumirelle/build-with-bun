@@ -47,11 +47,12 @@
         "typescript": "^5.9.3"
       },
       "inlined": {
-        "@antfu/utils": "^9.3.0",
-        "pathe": "^2.0.3"
+        "@antfu/utils": "^9.3.0"
       },
       "prod": {
-        "oxc-transform": "^0.108.0"
+        "obug": "^2.1.1",
+        "oxc-transform": "^0.108.0",
+        "pathe": "^2.0.3"
       },
       "check": {
         "@antfu/eslint-config": "^7.0.1",
@@ -71,7 +72,9 @@
     }
   },
   "dependencies": {
-    "oxc-transform": "catalog:prod"
+    "obug": "catalog:prod",
+    "oxc-transform": "catalog:prod",
+    "pathe": "catalog:prod"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:check",
@@ -83,8 +86,6 @@
     "eslint-plugin-format": "catalog:check",
     "knip": "catalog:check",
     "lint-staged": "catalog:check",
-    "obug": "^2.1.1",
-    "pathe": "catalog:inlined",
     "publint": "catalog:check",
     "simple-git-hooks": "catalog:dev",
     "typescript": "catalog:dev",

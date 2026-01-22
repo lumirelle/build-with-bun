@@ -104,7 +104,7 @@ describe('resolve', () => {
 
   it('should resolve path alias from tsconfig.json', async () => {
     const entryFile = join(testDir, 'index.ts')
-    await Bun.write(entryFile, 'import { createresolvedmodules } from "@test/helper.ts"; export const value = createresolvedmodules;')
+    await Bun.write(entryFile, 'import { build } from "@src/index.ts"; export const value = build;')
 
     const resolvedEntry = resolveCwd(entryFile)
     const entrypointPaths = [resolvedEntry]
@@ -118,7 +118,7 @@ describe('resolve', () => {
     })
 
     expect(resolvedModules.has(resolvedEntry)).toBe(true)
-    expect(resolvedModules.has(resolveCwd(join('test', 'helper.ts')))).toBe(true)
+    expect(resolvedModules.has(resolveCwd(join('src', 'index.ts')))).toBe(true)
   })
 
   it('should not resolve files from non-entrypoint imports', async () => {

@@ -12,7 +12,7 @@
     "module": "preserve",
     "moduleResolution": "bundler",
     "paths": {
-      "@test/*": ["./test/*"]
+      "@src/*": ["./src/*"]
     },
     "resolveJsonModule": true,
     "types": [

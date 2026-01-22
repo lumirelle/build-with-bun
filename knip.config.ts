@@ -5,8 +5,4 @@ export default {
   ignoreDependencies: [
     '@antfu/utils',
   ],
-  // @keep-sorted
-  ignoreFiles: [
-    'test/helper.ts',
-  ],
 } satisfies KnipConfig
