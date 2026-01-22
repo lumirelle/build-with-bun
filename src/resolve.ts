@@ -10,11 +10,11 @@ import { resolveCwd, tryResolveTs } from './utils.ts'
 /**
  * Resolve the dependent (relative) module paths of each entrypoint.
  *
- * @param entrypoints The entrypoints to resolve.
+ * @param resolvedEntrypoints The entrypoints to resolve.
  * @param resolvedModules The set to store all resolved module paths.
  */
 export function resolve(
-  entrypoints: string[],
+  resolvedEntrypoints: string[],
   resolvedModules: Set<string>,
 ): BunPlugin {
   /**
@@ -59,7 +59,7 @@ export function resolve(
       builder.onStart(() => {
         moduleToEntrypoint.clear()
         resolvedModules.clear()
-        for (const entrypoint of entrypoints) {
+        for (const entrypoint of resolvedEntrypoints) {
           moduleToEntrypoint.set(entrypoint, entrypoint)
           resolvedModules.add(entrypoint)
         }

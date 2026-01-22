@@ -5,6 +5,14 @@ import { RE_TS, TS_EXTENSIONS } from './constants'
 
 export const cwd = normalize(process.cwd())
 
+/**
+ * Resolve a path based on the current working directory.
+ *
+ * If the path is already absolute, it will be returned as is.
+ *
+ * @param path The path to resolve.
+ * @returns The resolved path.
+ */
 export function resolveCwd(path: string): string {
   return resolve(cwd, path)
 }
@@ -13,11 +21,17 @@ export function formatDuration(duration: number): string {
   return duration < 1000 ? `${duration.toFixed(2)}ms` : `${(duration / 1000).toFixed(2)}s`
 }
 
+export interface TryResolveTsOptions {
+  resolveIndex?: boolean
+}
+
 /**
  * Try to resolve a path to a TypeScript file by adding extensions.
  * Returns the resolved path if found, or null if not found.
  */
-export function tryResolveTs(basePath: string): string | null {
+export function tryResolveTs(basePath: string, options: TryResolveTsOptions = {}): string | null {
+  const { resolveIndex = true } = options
+
   // If already has a TS extension, check if it exists
   if (RE_TS.test(basePath))
     return existsSync(basePath) ? basePath : null
@@ -28,6 +42,10 @@ export function tryResolveTs(basePath: string): string | null {
     if (existsSync(pathWithExt))
       return pathWithExt
   }
+
+  // If not resolving index files, return null
+  if (!resolveIndex)
+    return null
 
   // Otherwise, try index files
   for (const ext of TS_EXTENSIONS) {

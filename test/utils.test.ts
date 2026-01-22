@@ -179,6 +179,15 @@ describe('utils', () => {
       expect(tryResolveTs(subDir)).toBe(indexPath)
     })
 
+    it('should not resolve index file when resolveIndex is false', () => {
+      const subDir = join(testDir, 'commonjs-modules')
+      mkdirSync(subDir, { recursive: true })
+      const indexPath = join(subDir, 'index.ts')
+      writeFileSync(indexPath, 'export const mod = 1')
+
+      expect(tryResolveTs(subDir, { resolveIndex: false })).toBeNull()
+    })
+
     it('should return null for non-existing path without extension', () => {
       const basePath = join(testDir, 'nonexistent')
 

@@ -386,16 +386,16 @@ function inlineModuleDtsRecursive(
  * Generate `.d.ts` files for entrypoints (Using `oxc-transform` and `oxc-parser`).
  *
  * @param root The project root directory.
- * @param entrypoints The entrypoints to generate `.d.ts` files for.
+ * @param resolvedEntrypoints The entrypoints to generate `.d.ts` files for.
  * @param resolvedModules The set of all resolved module paths.
  */
 export function dts(
   root: string | undefined,
-  entrypoints: string[],
+  resolvedEntrypoints: string[],
   resolvedModules: Set<string>,
 ): BunPlugin {
   if (!root)
-    root = extractCommonAncestor(entrypoints)
+    root = extractCommonAncestor(resolvedEntrypoints)
 
   /**
    * A map from module path to its isolated declaration.
@@ -430,7 +430,7 @@ export function dts(
         const argsPath = normalize(args.path)
 
         if (
-          (!entrypoints.includes(argsPath) && !resolvedModules.has(argsPath))
+          (!resolvedEntrypoints.includes(argsPath) && !resolvedModules.has(argsPath))
           || dtsMap.has(argsPath)
         ) {
           return
@@ -450,7 +450,7 @@ export function dts(
 
       // Composite all isolated declarations into dts files for each entrypoint.
       builder.onEnd(async () => {
-        for (const entrypoint of entrypoints) {
+        for (const entrypoint of resolvedEntrypoints) {
           const dts = inlineModuleDtsRecursive(entrypoint, dtsMap, declarationMap, typeRefsMap)
           const outFile = entrypoint.replace(RE_TS, '.d.ts')
           const outFilePath = join(

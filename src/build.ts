@@ -2,7 +2,7 @@
 import type { BuildOutput } from 'bun'
 import { existsSync, rmSync } from 'node:fs'
 import { styleText } from 'node:util'
-import { formatDuration, resolveCwd } from './utils.ts'
+import { formatDuration, resolveCwd, tryResolveTs } from './utils.ts'
 
 type BuildConfig = Bun.BuildConfig & {
   // Below are `Bun.BuildConfig` options with some modifications or clarifications
@@ -119,8 +119,17 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
   /**
    * Resolved entrypoint paths based on CWD.
+   *
+   * If the entrypoint is a file without extension, we will try to resolve the file with extensions `.ts`, `.tsx`, `.mts`, `.cts`.
+   * We don't resolve index files for entrypoints as `Bun.build` does not support directory entrypoints.
    */
-  const resolvedEntrypoints = entrypoints.map(entry => resolveCwd(entry))
+  const resolvedEntrypoints = entrypoints.map(
+    entry => tryResolveTs(
+      resolveCwd(entry),
+      { resolveIndex: false },
+    ),
+  )
+    .filter(Boolean) as string[]
   /**
    * Set of paths for all resolved modules.
    */

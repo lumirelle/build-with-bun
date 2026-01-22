@@ -2,8 +2,9 @@ import { $ } from 'bun'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'pathe'
+import { dirname, join } from 'pathe'
 import { build } from '../src/build.ts'
+import { RE_TS } from '../src/constants.ts'
 
 describe('build', () => {
   const testDir = join(tmpdir(), 'build-with-bun-test')
@@ -20,6 +21,38 @@ describe('build', () => {
       rmSync(testDir, { recursive: true, force: true })
     if (existsSync(testOutDir))
       rmSync(testOutDir, { recursive: true, force: true })
+  })
+
+  describe('Bun build behavior', () => {
+    it('should accept entrypoints without extension', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      await build({
+        entrypoints: [entryFile.replace(RE_TS, '')],
+        outdir: testOutDir,
+        dts: false,
+      })
+
+      const jsFile = join(testOutDir, 'index.js')
+      expect(existsSync(jsFile)).toBe(true)
+      const jsContent = await Bun.file(jsFile).text()
+      expect(jsContent).toContain('var hello = "world";')
+    })
+
+    it('should accept entrypoints without file name but output nothing', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      await build({
+        entrypoints: [dirname(entryFile)],
+        outdir: testOutDir,
+        dts: false,
+      })
+
+      const jsFile = join(testOutDir, 'index.js')
+      expect(existsSync(jsFile)).toBe(false)
+    })
   })
 
   describe('build options defaults', () => {

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'pathe'
 import { build } from '../src/build.ts'
+import { RE_TS } from '../src/constants.ts'
 
 describe('dts', () => {
   const testDir = join(tmpdir(), 'dts-test')
@@ -87,6 +88,37 @@ describe('dts', () => {
       expect(existsSync(dtsFile)).toBe(true)
       const dtsContent = await Bun.file(dtsFile).text()
       expect(dtsContent).toContain('export declare const hello = "world";')
+    })
+
+    it('should generate dts file for entrypoint without extension', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      await build({
+        entrypoints: [entryFile.replace(RE_TS, '')],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(true)
+      const dtsContent = await Bun.file(dtsFile).text()
+      expect(dtsContent).toContain('export declare const hello = "world";')
+    })
+
+    it('should not generate dts file for entrypoint without file name', async () => {
+      const entryFile = join(testDir, 'index.ts')
+      writeFileSync(entryFile, 'export const hello = "world"')
+
+      await build({
+        // `Bun.build` does not support directory entrypoints, so this plugin also skips generating dts file for directory entrypoints.
+        entrypoints: [dirname(entryFile)],
+        outdir: testOutDir,
+        dts: true,
+      })
+
+      const dtsFile = join(testOutDir, 'index.d.ts')
+      expect(existsSync(dtsFile)).toBe(false)
     })
   })
 
