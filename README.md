@@ -18,6 +18,7 @@ A utils for building JS/TS projects with bun.
 - [ ] Avoid missing rebuild if file changes happens during ongoing rebuild.
 - [ ] Safely close watchers on exit.
 - [ ] Prompt user to enable `isolateModules` if not enabled.
+- [ ] Fix `packages: bundle` mode?
 - [ ] ...
 
 ## Sponsors
