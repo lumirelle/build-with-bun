@@ -4,6 +4,9 @@
 
 import type { BunPlugin } from 'bun'
 import fs from 'node:fs'
+import { createDebug } from 'obug'
+
+const debug = createDebug('build-with-bun:watch', { useColors: true })
 
 export interface WatchOptions {
   /**
@@ -47,8 +50,12 @@ export function watch(
     name: 'watch',
     setup(builder) {
       builder.onEnd(async () => {
-        if (test)
+        debug('Watch plugin onEnd triggered')
+
+        if (test) {
+          debug('Test mode enabled, skipping watcher setup')
           return
+        }
 
         // Clean up watchers for removed modules
         for (const module of watcherMap.keys()) {
@@ -57,6 +64,7 @@ export function watch(
           if (watcherMap.has(module)) {
             watcherMap.get(module)!.close()
             watcherMap.delete(module)
+            debug('Closed watcher for removed module: %s', module)
           }
         }
 
@@ -80,6 +88,7 @@ export function watch(
             console.error(`Watcher error for file ${filePath}:`, error)
           })
           watcherMap.set(filePath, watcher)
+          debug('Set up watcher for module: %s', filePath)
         }
       })
 

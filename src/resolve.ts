@@ -3,8 +3,12 @@
  */
 
 import type { BunPlugin } from 'bun'
+import { createDebug } from 'obug'
 import { dirname, isAbsolute, normalize } from 'pathe'
 import { resolveCwd } from './utils.ts'
+
+const debug = createDebug('build-with-bun:resolve', { useColors: true })
+const debugDetail = createDebug('build-with-bun:resolve-detail', { useColors: true })
 
 /**
  * Record all resolved module paths from entrypoints.
@@ -27,32 +31,45 @@ export function resolve(
     name: 'resolve',
     setup(builder) {
       builder.onStart(() => {
-        // Clear previous mappings in watch mode
-        if (moduleToEntrypoint.size > 0)
+        debug('Resolve plugin onStart triggered')
+
+        if (moduleToEntrypoint.size > 0) {
+          debug('Clearing previous module to entrypoint mappings')
           moduleToEntrypoint.clear()
-        if (resolvedModules.size > 0)
+        }
+        if (resolvedModules.size > 0) {
+          debug('Clearing previously resolved modules')
           resolvedModules.clear()
-        // Initialize mappings for entrypoints
+        }
+
         for (const entrypoint of resolvedEntrypoints) {
           moduleToEntrypoint.set(entrypoint, entrypoint)
           resolvedModules.add(entrypoint)
         }
+        debug('Intialized `moduleToEntrypoint` map with entrypoints: %O', moduleToEntrypoint)
+        debug('Intialized `resolvedModules` set with entrypoints: %O', resolvedModules)
       })
 
       builder.onResolve(
         { filter: /.*/ },
         (args) => {
-          // For entrypoints, they are already recorded.
-          if (args.importer === '')
+          debug('Resolve plugin onResolve triggered')
+
+          if (args.importer === '') {
+            debug('Skipping resolution for entrypoint: %s', args.path)
             return
+          }
 
           // Check if importer is absolute path first, save some microseconds
           const importer = isAbsolute(args.importer) ? normalize(args.importer) : resolveCwd(args.importer)
 
           // Use Bun's internal resolver to resolve the module path
           const modulePath = normalize(Bun.resolveSync(args.path, dirname(importer)))
-          if (modulePath.match(/^node|^bun/) || modulePath.includes('node_modules'))
+          debugDetail('Resolved module path: %s imported by %s', modulePath, importer)
+          if (modulePath.match(/^node|^bun/) || modulePath.includes('node_modules')) {
+            debug('Skipping resolution for node or bun built-in modules or node_modules: %s', modulePath)
             return undefined
+          }
 
           // Find which entrypoint this importer belongs to.
           const entrypoint = moduleToEntrypoint.get(importer)
@@ -63,8 +80,10 @@ export function resolve(
 
           // Map the resolved file to its entrypoint.
           // Note: A file may be shared by multiple entrypoints, we keep the first mapping.
-          if (!moduleToEntrypoint.has(modulePath))
+          if (!moduleToEntrypoint.has(modulePath)) {
             moduleToEntrypoint.set(modulePath, entrypoint)
+            debug('Record new module to entrypoint mapping: %s -> %s', modulePath, entrypoint)
+          }
           resolvedModules.add(modulePath)
           return undefined
         },

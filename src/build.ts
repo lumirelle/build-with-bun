@@ -2,8 +2,12 @@
 import type { BuildOutput } from 'bun'
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { styleText } from 'node:util'
+import { createDebug, enable } from 'obug'
 import { isAbsolute, normalize } from 'pathe'
 import { formatDuration, resolveCwd } from './utils.ts'
+
+const debug = createDebug('build-with-bun:build', { useColors: true })
+const debugPlugin = createDebug('build-with-bun:dts:plugin', { useColors: true })
 
 export type BuildConfig = Bun.BuildConfig & {
   // Below are `Bun.BuildConfig` options with some modifications or clarifications
@@ -161,6 +165,14 @@ export type BuildConfig = Bun.BuildConfig & {
    * @internal
    */
   test?: boolean
+  /**
+   * Whether or not to output debug info.
+   *
+   * You can also specify a string to enable specific debug subnamespaces.
+   *
+   * '*' can be used as wildcard to enable all subnamespaces.
+   */
+  debug?: boolean | string
 }
 
 /**
@@ -183,6 +195,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     watch,
     silent,
     test,
+    debug: enableDebug,
     // Above is additional options
     plugins = [],
     sourcemap = watch ? 'external' : 'none',
@@ -190,14 +203,19 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     ...rest
   } = config
 
+  if (enableDebug)
+    enable(`build-with-bun:${enableDebug === true ? '*' : enableDebug}`)
+
   // Validate entrypoints, entrypoints must be files with extensions
   for (const entry of entrypoints) {
     if (!existsSync(entry) || statSync(entry).isDirectory())
-      throw new Error(`Entrypoint file not found: ${entry}`)
+      throw new Error(`Entrypoint file not found: ${entry}. Notice that, this util does not automatically resolve file extension or index file for entrypoints.`)
   }
 
-  if (outdir && clean && existsSync(outdir))
+  if (outdir && clean && existsSync(outdir)) {
+    debug('Cleaning outdir: %s', outdir)
     rmSync(outdir, { recursive: true })
+  }
 
   /**
    * Resolved entrypoint paths based on CWD.
@@ -206,24 +224,29 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     // Check if entry is absolute path first, save some microseconds
     entry => isAbsolute(entry) ? normalize(entry) : resolveCwd(entry),
   )
+  debug('Resolved entrypoints: %O', resolvedEntrypoints)
   /**
    * Set of paths for all resolved modules.
    */
   const resolvedModules = new Set<string>()
 
   if (dts || watch) {
+    debugPlugin('Create resolve plugin...')
     plugins.push((await import('./resolve.ts')).resolve(
       resolvedEntrypoints,
       resolvedModules,
     ))
+    debugPlugin('Created resolve plugin')
   }
 
   if (dts) {
+    debugPlugin('Create dts plugin...')
     plugins.push((await import('./dts.ts')).dts(
       root,
       resolvedEntrypoints,
       resolvedModules,
     ))
+    debugPlugin('Created dts plugin')
   }
 
   const bunConfig = {
@@ -238,12 +261,15 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     packages,
     ...rest,
   }
+  debug('Constructed Bun build config: %O', bunConfig)
 
   if (watch) {
+    debugPlugin('Create watch plugin...')
     plugins.push(
       (await import('./watch.ts')).watch({
         onRebuild: async () => {
           const rebuildStartTime = performance.now()
+          debug('Rebuild triggered due to file changes')
           if (!silent)
             console.info(styleText('yellow', '⭮ Rebuilding...'))
 
@@ -252,19 +278,24 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
 
           const rebuildEndTime = performance.now()
           const rebuildCostTime = rebuildEndTime - rebuildStartTime
+          debug('Rebuild completed in %fms', formatDuration(rebuildCostTime))
           if (!silent)
             console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(rebuildCostTime))}`)
         },
         test,
       }, resolvedModules),
     )
+    debugPlugin('Created watch plugin')
   }
 
+  debug('Starting Bun build...')
   const output = await Bun.build(bunConfig)
   await afterBuild?.(output)
+  debug('Bun build finished')
 
   const endTime = performance.now()
   const costTime = endTime - startTime
+  debug('Build completed in %fms', formatDuration(costTime))
   if (!silent)
     console.info(`${styleText('green', '✔')} Build completed in ${styleText('magenta', formatDuration(costTime))}`)
 
@@ -277,6 +308,7 @@ export async function build(config: BuildConfig): Promise<BuildOutput> {
     output._resolvedEntrypoints = [...resolvedEntrypoints]
     // @ts-expect-error internal testing only
     output._pluginNames = plugins.map(plugin => plugin.name)
+    debug('Test mode enabled, appended extra debug info to build output')
   }
   return output
 }

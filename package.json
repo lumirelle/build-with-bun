@@ -83,6 +83,7 @@
     "eslint-plugin-format": "catalog:check",
     "knip": "catalog:check",
     "lint-staged": "catalog:check",
+    "obug": "^2.1.1",
     "pathe": "catalog:inlined",
     "publint": "catalog:check",
     "simple-git-hooks": "catalog:dev",
