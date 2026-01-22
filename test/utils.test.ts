@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import process from 'node:process'
 import { dirname, join, normalize, resolve } from 'pathe'
 import { cwd, extractCommonAncestor, formatDuration, resolveCwd, tryResolveTs } from '../src/utils.ts'
@@ -328,18 +328,17 @@ describe('utils', () => {
     })
 
     it('should handle mixed absolute (not based on cwd) and relative paths and return absolute path', async () => {
+      const homeDir = homedir()
       const paths = process.platform === 'win32'
         ? [
-            'C:\\Users\\user\\project\\src\\index.ts',
+            `${homeDir}\\project\\src\\index.ts`,
             'new-projects\\src\\utils\\helpers.ts',
           ]
         : [
-            '/home/auser/project/src/index.ts',
+            `${homeDir}/project/src/index.ts`,
             'new-projects/src/utils/helpers.ts',
           ]
-      expect(extractCommonAncestor(paths)).toBe(
-        process.platform === 'win32' ? 'C:/Users' : '/home',
-      )
+      expect(extractCommonAncestor(paths)).toBe(normalize(homeDir))
     })
   })
 })
