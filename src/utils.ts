@@ -1,7 +1,7 @@
 import process from 'node:process'
 import { dirname, isAbsolute, normalize, relative, resolve } from 'pathe'
 
-export const cwd = normalize(process.cwd())
+export const cwd: string = normalize(process.cwd())
 
 /**
  * Resolve a path based on the current working directory.
