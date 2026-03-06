@@ -7,6 +7,10 @@
 [![Codecov][codecov-src]][codecov-href]
 [![License][license-src]][license-href]
 
+> [!Caution]
+>
+> Try [bunup](https://bunup.dev) instead!
+
 A utils for building JS/TS projects with bun.
 
 ## Todos
